@@ -1,21 +1,47 @@
-import re, sys
+import re
+import sys
 import time
 
+inputFileName = ""
+outputFileName = ""
 
+# Prints out a list token by token, separating tokens with a newline
 def listPrint(list):
     for token in list:
         print(token)
+
+    # Finish with a 1 line spacer
+    print()
+
+# Spin up intelliJ
+def spinUpIntelliJ():
+    print("Spinning up IntelliJ", end = "", flush = True)
+    for i in range(0, 24):
+        print(".", end = "", flush = True)
+        time.sleep(.05)
+    print("Spin up complete.\n")
+    time.sleep(.5)
 
 # Parses the input file and stores all relevant information for parsing.
 # Modifies the array of cases to include the universe of cases
 #   Each case has a list of indicies to a dictionary key which specifies the value of the attribute
 # Modifies the dictionary of attributes to include all attributes values seen
-def parseFile(file, attributes):
-    print("Parsing input file", end = "", flush = True)
-    for i in range(0, 3):
-        print(".", end = "", flush = True)
-        time.sleep(.5)
-    print("\n")
+def parseFile(attributes):
+    global inputFileName
+    inputFileName= input("\nWhat is the name of the data file you want to evaluate?\t")
+
+    while True:
+        try:
+            file = open(inputFileName)
+            break
+        except IOError:
+            inputFileName = input("Error, the file could not be opened. Try again:\t\t")
+    # Endwhile
+
+    print("\nInput file accepted: [{}]\n".format(inputFileName))
+
+    # Parse the input file to generate the universe of cases
+    spinUpIntelliJ()
 
     skipInput = True
     readAttrs = False
@@ -61,38 +87,18 @@ def parseFile(file, attributes):
     if len(currentCase) > 0:
         universe.append(currentCase)
 
+    # DEBUG
     listPrint(universe)
-    print()
+
     # return the dictionary
+    return universe
 
-# The main function of the MLEM2 algorithm program
-# Accepts an inputFile from the user to parse. Checks if the file can be opened, if so, prompts the
-# user for a calculation method (certain vs possible rulesets). Finally, computes the rulesets
-# using the MLEM2 algorithm.
-#
-# Handles numerical attribute values using the all cutoffs approach
-# Handles missing attribute values using concept approximations
-def main():
-    print("-------------------------------------") 
-    print("|  Welcome to Jay's MLEM2 Program!  |")
-    print("|  EECS690 - Data Mining Fall 2016  |")
-    print("-------------------------------------") 
-    inputFile = input("\nWhat is the name of the data file you want to evaluate?\t")
-
-    while True:
-        try:
-            file = open(inputFile)
-            break
-        except IOError:
-            inputFile = input("Error, the file could not be opened. Try again:\t\t")
-
-    print("\nInput file accepted: [{}]\n".format(inputFile))
-
-    # Parse the input file to generate the universe of cases
-    attributes = []
-    universe = parseFile(file, attributes)
-
-    print("What do you want to calculate?\n\t1. Certain Rules\n\t2. Possible Rules\n")
+# Captures user input to determine which rule type to calculate
+# Choice 1: Calculates the set of certain rules
+# Choice 2: Calculates the set of possible rules
+# Returns the choice of the user
+def getRuleType():
+    print("What do you want to calculate?\n   1. Certain Rules\n   2. Possible Rules\n")
 
     while True:
         try:
@@ -105,13 +111,98 @@ def main():
 
     print("\nChoice {} accepted.\n".format(choice))
 
-    outputFile = input("What is the name of the output file?\t\t")
-
-    print("\nOutput file accepted: [{}]\n".format(outputFile))
-
     if choice == 1:
-        print("Calculating all certain rules from input dataset: [{}]\n".format(inputFile))
+        print("Calculating certain rules from dataset: [{}]\n".format(inputFileName))
     else:
-        print("Calculating all possible rules from input dataset: [{}]\n".format(inputFile))
+        print("Calculating possible rules from dataset: [{}]\n".format(inputFileName))
+
+# Determine what type each attribute belongs to
+# Type 1: Symbolic
+# Type 2: Numeric
+# Type 3: Missing (If this happens, the attribute should be tossed!)
+# Returns a list of the attribute types
+def attributeTypes(universe, attributes):
+    types = []
+
+    decimal = "-?[0-9]+(\.[0-9]+)?"
+
+    # For every attribute, find its type
+    for i in range(0, len(attributes) - 1):
+        case = 0
+
+        # Cycle through this attribute in each case until a valid type is found
+        while True:
+            attr = universe[case][i]
+
+            # Uses regex to figure out what type we're dealing with
+            match = re.fullmatch(decimal + "\.\." + decimal, attr)
+            if match != None:
+                types.append(1)
+                break
+
+            match = re.fullmatch(decimal, attr)
+            if match != None:
+                types.append(2)
+                break
+
+            case += 1
+            if case == len(universe):
+                print("Error: type 3 attribute.\n")
+        # Endwhile
+    # Endfor
+
+    for i in range(0, len(types)):
+        print("{}:{}".format(attributes[i], types[i]))
+
+    return types
+
+# Calculates the set of rules based off of user input
+# Choice 1: Calculates the set of certain rules
+# Choice 2: Calculates the set of possible rules
+# Returns the set of rules that were calculated given the user input choice
+def calculateRules(universe, attributes):
+    choice = getRuleType()
+
+    # Determine what types the attributes are
+    attrTypes = attributeTypes(universe, attributes)
+    rules = attributes
+
+    return rules
+
+# Prints the output ruleSet to a filename given by the user
+def printOutput(ruleSet):
+    outputFileName = input("What is the name of the output file?\t\t")
+    print("\nOutput file accepted: [{}]\n".format(outputFileName)) 
+    outputFileName = open(outputFileName, "w")
+
+    for rule in ruleSet:
+        outputFileName.write("%s\n" % rule)
+
+    # DEBUG print the ruleset generated at the very end
+    listPrint(ruleSet)
+
+# The main function of the MLEM2 algorithm program
+# Accepts an inputFileName from the user to parse. Checks if the file can be opened, if so, prompts the
+# user for a calculation method (certain vs possible rulesets). Finally, computes the rulesets
+# using the MLEM2 algorithm.
+#
+# Handles numerical attribute values using the all cutoffs approach
+# Handles missing attribute values using concept approximations
+def main():
+    print("-------------------------------------------------------------") 
+    print("|              Welcome to Jay's MLEM2 Program!              |")
+    print("|                                                           |")
+    print("|              EECS690 - Data Mining Fall 2016              |")
+    print("-------------------------------------------------------------") 
+    
+    # Store all of the input data in the attributes/universe structures
+    attributes = []
+    universe = parseFile(attributes)
+
+    # Calculate the rulesets from the universe/attributes
+    ruleSet = calculateRules(universe, attributes)
+
+    # Print the output to the desired file
+    printOutput(ruleSet)
 
 main()
