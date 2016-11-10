@@ -4,6 +4,7 @@ import time
 
 inputFileName = ""
 outputFileName = ""
+DEBUG = 1
 
 # Prints out a list token by token, separating tokens with a newline
 def listPrint(list):
@@ -88,7 +89,11 @@ def parseFile(attributes):
         universe.append(currentCase)
 
     # DEBUG
-    listPrint(universe)
+    if DEBUG:
+        listPrint(universe)
+
+    print("Input file case list parsing complete.")
+    print("There are {} total cases.\n".format(len(universe)))
 
     # return the dictionary
     return universe
@@ -125,6 +130,8 @@ def attributeTypes(universe, attributes):
     types = []
 
     decimal = "-?[0-9]+(\.[0-9]+)?"
+    type1 = 0
+    type2 = 0
 
     # For every attribute, find its type
     for i in range(0, len(attributes) - 1):
@@ -138,11 +145,13 @@ def attributeTypes(universe, attributes):
             match = re.fullmatch(decimal + "\.\." + decimal, attr)
             if match != None:
                 types.append(1)
+                type1 += 1
                 break
 
             match = re.fullmatch(decimal, attr)
             if match != None:
                 types.append(2)
+                type2 += 1
                 break
 
             case += 1
@@ -151,8 +160,14 @@ def attributeTypes(universe, attributes):
         # Endwhile
     # Endfor
 
-    for i in range(0, len(types)):
-        print("{}:{}".format(attributes[i], types[i]))
+    print("Attribute type evaluation complete.")
+    print("There are {} total attributes.\n".format(len(attributes) - 1))
+    print("There are {} symbolic attributes, and {} numeric attributes.\n".format(type1, type2))
+    
+    if DEBUG:
+        for i in range(0, len(types)):
+            print("{}:{}".format(attributes[i], types[i]))
+        print()
 
     return types
 
@@ -179,7 +194,8 @@ def printOutput(ruleSet):
         outputFileName.write("%s\n" % rule)
 
     # DEBUG print the ruleset generated at the very end
-    listPrint(ruleSet)
+    if DEBUG:
+        listPrint(ruleSet)
 
 # The main function of the MLEM2 algorithm program
 # Accepts an inputFileName from the user to parse. Checks if the file can be opened, if so, prompts the
