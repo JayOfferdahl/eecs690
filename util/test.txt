@@ -1,3 +1,3 @@
-testfiles/test.txt
+testfiles/echo-40.txt
 1
 out.txt
