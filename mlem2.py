@@ -9,23 +9,22 @@ incompleteDataset = False
 DEBUG = 0
 PRINT_LINE_NUMBERS = 0
 
-# Prints out a list token by token, separating tokens with a newline
+# Prints out an enumerable object token by token, separating tokens with a newline.
+# Will print lines with link numbers starting at 0 if PRINT_LINE_NUMBERS is True
 def listPrint(list):
     for index, token in enumerate(list):
         if PRINT_LINE_NUMBERS:
             print("{} ".format(index), end = "", flush = True)
         print(token)
     # Endfor
-
-    # Finish with a 1 line spacer
     print()
 
-# Spin up intelliJ
+# Spin up intelliJ for good luck
 def spinUpIntelliJ():
     print("Spinning up IntelliJ", end = "", flush = True)
     for i in range(0, 24):
         print(".", end = "", flush = True)
-        time.sleep(.05)
+        time.sleep(.0404)
     print("Spin up complete.\n")
     time.sleep(.5)
 
@@ -109,7 +108,7 @@ def parseFile(attributes):
     if incompleteDataset:
         print("***This dataset is incomplete; using concept approximations.\n")
 
-    # return the dictionary
+    # return the input dataset
     return universe
 
 # Captures user input to determine which rule type to calculate
@@ -136,26 +135,6 @@ def getRuleType():
     print("Calculating {} rules from dataset: [{}]\n".format(rule, inputFileName))
 
     return choice
-
-# Computes the concepts for the given universe (sets of distinct cases with the same decision)
-def calculateConcepts(universe):
-    concepts = collections.OrderedDict()
-
-    # For every case in the universe, add the case number to the concept set it belongs
-    for index, case in enumerate(universe):
-        decision = case[-1]
-
-        if decision in concepts:
-            concepts[decision].add(index)
-        else:
-            concepts[decision] = set([index])
-    # Endfor
-
-    # For simplicity, sort each concept
-    for key, value in concepts.items():
-        concepts[key] = sorted(value, key = int)
-
-    return concepts
 
 # Determine what type each attribute belongs to
 # Type 1: Symbolic
@@ -208,6 +187,26 @@ def attributeTypes(universe, attributes):
 
     return types
 
+# Computes the concepts for the given universe (sets of distinct cases with the same decision)
+def calculateConcepts(universe):
+    concepts = collections.OrderedDict()
+
+    # For every case in the universe, add the case number to the concept set it belongs
+    for index, case in enumerate(universe):
+        decision = case[-1]
+
+        if decision in concepts:
+            concepts[decision].add(index)
+        else:
+            concepts[decision] = set([index])
+    # Endfor
+
+    # For simplicity, sort each concept
+    for key, value in concepts.items():
+        concepts[key] = sorted(value, key = int)
+
+    return concepts
+
 # Computes the specified values for the given concept. If a value for the given attribute index
 # is not lost, don't care, or "-", add it to the list of specified values.
 def calculateValuesSpecified(universe, attrIndex, concept):
@@ -222,18 +221,6 @@ def calculateValuesSpecified(universe, attrIndex, concept):
 
     return valuesSpecified
 
-def pairBlockSeparated(attrValueDict, attribute):
-    attrValuePairs = []
-    attrValueBlocks = []
-
-    for key, value in attrValueDict.items():
-        attrValuePairs.append("({}, {})".format(attribute, key))
-        attrValueBlocks.append(value)
-    # Endfor
-
-    #attrValueBlocks.sort()
-
-    return [attrValuePairs, attrValueBlocks]
 
 # Calculates the cutpoints of the numeric attribute at attribute index attrIndex of the universe
 # Returns a list of pairs which the first value is the lower, and the second value is the upper
@@ -261,6 +248,19 @@ def calculateCutpointAttrValuePairs(universe, attrIndex):
         numericAttrValuePairs.extend([[low, cutpoint], [cutpoint, high]])
 
     return numericAttrValuePairs
+
+def pairBlockSeparated(attrValueDict, attribute):
+    attrValuePairs = []
+    attrValueBlocks = []
+
+    for key, value in attrValueDict.items():
+        attrValuePairs.append("({}, {})".format(attribute, key))
+        attrValueBlocks.append(value)
+    # Endfor
+
+    #attrValueBlocks.sort()
+
+    return [attrValuePairs, attrValueBlocks]
 
 def calculateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
     attrValueDict = collections.OrderedDict()
@@ -350,8 +350,17 @@ def calculateApprox(sets, concepts, approxType):
 
     for concept in concepts.values():
         approximations.append(set())
+        currentSets = []
 
-        for block in sets:
+        # If the dataset is incomplete, use concept approximations (only take from concept cases)
+        if incompleteDataset:
+            for number in concept:
+                currentSets.append(sets[number])
+            # Endfor
+        else:
+            currentSets = sets
+
+        for block in currentSets:
             if approxType == "lower":
                 if block.issubset(concept):
                     approximations[-1].update(block)
@@ -360,13 +369,16 @@ def calculateApprox(sets, concepts, approxType):
         # Endfor
     # Endfor
 
+    for index, approx in enumerate(approximations):
+        approximations[index] = sorted(approx, key = int)
+
     if DEBUG:
         print("Calculated approximations:")
         listPrint(approximations)
 
     return approximations
 
-def calculateCSets(universe, attrValueDict, attributes, concepts):
+def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
     characteristicSets = []
 
     for index, case in enumerate(universe):
@@ -375,32 +387,66 @@ def calculateCSets(universe, attrValueDict, attributes, concepts):
         # For every attribute in the case (not the decision)
         for i in range(0, len(case) - 1):
             value = case[i]
+            currentResult = set()
+
             # Don't care and lost cases equate to the universe in this function
             if value == '*' or value == '?':
                 continue
-            # Attribute concept cases 
+            # Symbolic values
+            elif attrTypes[i] == 1:
+                # Attribute concept cases 
+                if value == '-':
+                    valuesSpecified = calculateValuesSpecified(universe, i, concepts[case[-1]])
+                    for temp in valuesSpecified:
+                        for key, specifiedSet in attrValueDict[attributes[i]].items():
+                            currentResult.update(specifiedSet)
+                        # Endfor
+                    # Endfor
+                else:
+                    currentResult = attrValueDict[attributes[i]][value]
+            # Numeric values
             elif value == '-':
-                currentResult = calculateValuesSpecified(universe, i, concepts[case[-1]])
-            # Normal values
-            else:
-                currentResult = attrValueDict[attributes[i]].get(value)
+                valuesSpecified = calculateValuesSpecified(universe, i, concepts[case[-1]])
+                for temp in valuesSpecified:
+                    for key, intervalSet in attrValueDict[attributes[i]].items():
+                        interval = key.split("..")
+                        map(float, interval)
 
-            print("Current result:", currentResult)
+                        if temp >= interval[0] and temp <= interval[1]:
+                            currentResult.update(intervalSet)
+                        # Endif
+                    # Endfor
+                # Endfor
+            else:
+                value = float(value)
+                for key, intervalSet in attrValueDict[attributes[i]].items():
+                    interval = key.split("..")
+                    interval = [float(i) for i in interval]
+
+                    if value >= interval[0] and value <= interval[1]:
+                        currentResult.update(intervalSet)
+                    # Endif
+                # Endfor
+            # Endif
 
             # If this is the first intersecting set, make it the running result
-            if currentResult != None and len(runningResult) == 0:
+            if len(runningResult) == 0:
                 runningResult = currentResult
+            elif len(currentResult) > 0:
+                runningResult = set.intersection(runningResult, currentResult)
         # Endfor
-
         if len(runningResult) == 0:
             print("Error, characteristic set is empty.")
+        else:
+            characteristicSets.append(runningResult)
     # Endfor
 
-    return characteristicSets
+    if DEBUG:
+        print("Characteristic sets:")
+        for index, cSet in enumerate(characteristicSets):
+            print("{}. {}".format(index + 1, cSet))
 
-def mlem2(attrValueDict, goals):
-    print("We calculating, fam")
-    return []
+    return characteristicSets
 
 def equivalentCases(case, caseOther):
     for i in range(0, len(case) - 1):
@@ -411,6 +457,9 @@ def equivalentCases(case, caseOther):
 
     return True
 
+# Calculates A* for the given universe. This function parses each case to determine duplicate
+# cases, when a duplicate is found (all attribute values match that of another case or cases), it
+# is added to the set of cases which share all the same attributes
 def calculateAStar(universe):
     aStar = []
 
@@ -432,10 +481,20 @@ def calculateAStar(universe):
             aStar.append([row])
     # Endfor
 
+    # Convert them to sets
     for index, aSet in enumerate(aStar):
         aStar[index] = set(aSet)
 
     return aStar
+
+# The function is responsible for taking input attribute value pairs/block and a set of goals in
+# order to determine a set of rules for this dataset. No matter the specification of possible or
+# certain rules, this will produce the desired output given the correct blocks and goals.
+def mlem2(attrValueDict, goals):
+    print("Calculating goals:")
+    listPrint(goals)
+
+    return []
 
 # Calculates the set of rules based off of user input
 # Choice 1: Calculates the set of certain rules
@@ -476,7 +535,7 @@ def calculateRules(universe, attributes):
         else:
             goals = calculateApprox(aStar, concepts, "upper")
     else:
-        characteristicSets = calculateCSets(universe, attrValueDict, attributes, concepts)
+        characteristicSets = calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts)
 
         if choice == 1:
             goals = calculateApprox(characteristicSets, concepts, "lower")

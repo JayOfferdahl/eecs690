@@ -1,0 +1,9 @@
+< a a a d >
+[ Temperature Headache Cough Flu ]
+39.8 yes yes yes
+? yes yes yes
+40.8 yes ? yes
+? no no yes
+39.8 no no no
+36.8 yes no no
+38.4 no yes no
