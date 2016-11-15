@@ -1,55 +1,57 @@
+###################################################################################################
+#
+#   Program: Rule Induction with MLEM2
+#   Author: Jay Offerdahl
+#   Class: EECS690 (Dr. Grzymala-Busse), Fall 2016
+#
+#   Description: Prompts the user for input/output files as well as a choice between calculating
+#                certain or possible rules. The program parses the input file and performs some
+#                amount of preprocessing before inducing the rules using the MLEM2 algorithm.
+#                After the rules have been induced, the program asks the user if they want to also
+#                calculate the other set of rules in order to save a large amount of preprocessing.
+#
+###################################################################################################
+
+import collections
 import re
 import sys
 import time
-import collections
 
-inputFileName = ""
-outputFileName = ""
-incompleteDataset = False
+__inputFile__ = ""
+__calcCertain__ = False
+__incompleteDataset__ = False
+lowerApproximations = None
+
+# Debug flag, if set to 0, all debugging statements will be silenced
 DEBUG = 0
-PRINT_LINE_NUMBERS = 0
 
 # Prints out an enumerable object token by token, separating tokens with a newline.
 # Will print lines with link numbers starting at 0 if PRINT_LINE_NUMBERS is True
-def listPrint(list):
-    for index, token in enumerate(list):
-        if PRINT_LINE_NUMBERS:
-            print("{} ".format(index), end = "", flush = True)
-        print(token)
-    # Endfor
+def listPrint(lst):
+    if not lst: print("[]")
+    for token in lst: print(token)
     print()
-
-# Spin up intelliJ for good luck
-def spinUpIntelliJ():
-    print("Spinning up IntelliJ", end = "", flush = True)
-    for i in range(0, 24):
-        print(".", end = "", flush = True)
-        time.sleep(.0404)
-    print("Spin up complete.\n")
-    time.sleep(.5)
 
 # Parses the input file and stores all relevant information for parsing.
 # Modifies the array of cases to include the universe of cases
 #   Each case has a list of indicies to a dictionary key which specifies the value of the attribute
 # Modifies the dictionary of attributes to include all attributes values seen
 def parseFile(attributes):
-    global inputFileName
-    global incompleteDataset
-    inputFileName= input("\nWhat is the name of the data file you want to evaluate?\t")
+    global __inputFile__
+    global __incompleteDataset__
+    __inputFile__= input("\nWhat is the name of the input dataset file?\t")
 
     while True:
         try:
-            file = open(inputFileName)
+            file = open(__inputFile__)
             break
         except IOError:
-            inputFileName = input("Error, the file could not be opened. Try again:\t\t")
+            __inputFile__ = input("Error, the file could not be opened. Try again:\t\t")
     # Endwhile
 
-    print("\nInput file accepted: [{}]\n".format(inputFileName))
+    print("\nInput file accepted: [{}]\n".format(__inputFile__))
 
     # Parse the input file to generate the universe of cases
-    spinUpIntelliJ()
-
     skipInput = True
     readAttrs = False
     universe = []
@@ -61,9 +63,10 @@ def parseFile(attributes):
         tokens = line.split()
 
         for token in tokens:
-            # Wait for the end of the attribute/decision descriptors
+            # If a comment is encountered, skip the rest of the line
             if token == '!':
                 break
+            # Adjust flags to now accept attribute names
             elif token == ">":
                 skipInput = False
                 readAttrs = True
@@ -76,10 +79,11 @@ def parseFile(attributes):
                         attributes.append(token)
                     else:
                         print("Error: Token already recognized.\n")
+                # Endif
             elif not skipInput and not readAttrs:
                 # Check here if there are any missing attributes (must check all tokens)
-                if not incompleteDataset and (token == '?' or token == '*' or token == '-'):
-                    incompleteDataset = True
+                if not __incompleteDataset__ and (token == '?' or token == '*' or token == '-'):
+                    __incompleteDataset__ = True
 
                 if attr >= len(attributes):
                     # Finished a case, reset attribute counter and append this list to the universe
@@ -95,18 +99,12 @@ def parseFile(attributes):
     # Endfor
 
     # Append the last currentCase (last line)
-    if len(currentCase) > 0:
-        universe.append(currentCase)
+    universe.append(currentCase)
 
-    # DEBUG
-    if DEBUG:
-        listPrint(universe)
+    print("Input file parsed. There are {} total cases.".format(len(universe)))
 
-    print("Input file case list parsing complete.")
-    print("There are {} total cases.\n".format(len(universe)))
-
-    if incompleteDataset:
-        print("***This dataset is incomplete; using concept approximations.\n")
+    if __incompleteDataset__:
+        print("  **This dataset is incomplete; using concept approximations.\n")
 
     # return the input dataset
     return universe
@@ -116,7 +114,7 @@ def parseFile(attributes):
 # Choice 2: Calculates the set of possible rules
 # Returns the choice of the user
 def getRuleType():
-    print("What do you want to calculate?\n   1. Certain Rules\n   2. Possible Rules\n")
+    print("What do you want to calculate?\n  1. Certain Rules\n  2. Possible Rules\n")
 
     # While invalid input from the user (out of bounds or of wrong type)
     while True:
@@ -129,12 +127,24 @@ def getRuleType():
             print("Please enter a number.")
     # Endwhile
 
-    print("\nChoice {} accepted.\n".format(choice))
-
     rule = "certain" if choice == 1 else "possible"
-    print("Calculating {} rules from dataset: [{}]\n".format(rule, inputFileName))
+    print("\nChoice {} accepted; calculating {} rules from input data.\n".format(choice, rule))
 
-    return choice
+    return choice == 1
+
+# Prompt the user to determine if the other ruleset should be calculated. For example, if the user
+# originally requested certain rules, a "y" here means they also want to calculate possible rules.
+def calculateOtherSet():
+    rulesOther = "possible" if __calcCertain__ else "certain"
+    print("-------------------------------------------------------------\n")
+    calculateOtherSet = input("Do you want to also calculate {} rules? (y/n)\n\n".format(rulesOther))
+
+    # If yes, back out and calculate
+    if calculateOtherSet == 'y' or calculateOtherSet == 'Y':
+        return True
+    # Else, we're done here
+    else:
+        sys.exit()
 
 # Determine what type each attribute belongs to
 # Type 1: Symbolic
@@ -175,15 +185,8 @@ def attributeTypes(universe, attributes):
         # Endwhile
     # Endfor
 
-    print("Attribute type evaluation complete.")
-    print("There are {} total attributes.\n".format(len(attributes) - 1))
-    print("There are {} symbolic attributes, and {} numeric attributes.\n".format(type1, type2))
-    
-    # Print out the attribute names and their corresponding types
-    if DEBUG:
-        for i in range(0, len(types)):
-            print("{}:{}".format(attributes[i], types[i]))
-        print()
+    print("Attribute types evaluated. There are {} attributes.".format(len(attributes) - 1))
+    print("  **{} symbolic attributes, {} numeric attributes.\n".format(type1, type2))
 
     return types
 
@@ -262,7 +265,7 @@ def pairBlockSeparated(attrValueDict, attribute):
 
     return [attrValuePairs, attrValueBlocks]
 
-def calculateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
+def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
     attrValueDict = collections.OrderedDict()
 
     # If we have a numeric attribute, find the cutpoints and initialize the dictionary
@@ -316,7 +319,7 @@ def calculateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
     # Endfor
 
     # If we're dealing with incomplete data, handle those cases here
-    if incompleteDataset:
+    if __incompleteDataset__:
         # Add all attribute concepts values to blocks which are specified in the concept
         for case in attrConceptVals:
             decision = universe[case][-1]
@@ -346,14 +349,14 @@ def calculateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
 
 # Calculates the approximations of the concepts within the universe
 def calculateApprox(sets, concepts, approxType):
-    approximations = []
+    approximations = collections.OrderedDict()
 
-    for concept in concepts.values():
-        approximations.append(set())
+    for decision, concept in concepts.items():
+        approximations[decision] = set()
         currentSets = []
 
         # If the dataset is incomplete, use concept approximations (only take from concept cases)
-        if incompleteDataset:
+        if __incompleteDataset__:
             for number in concept:
                 currentSets.append(sets[number])
             # Endfor
@@ -363,18 +366,14 @@ def calculateApprox(sets, concepts, approxType):
         for block in currentSets:
             if approxType == "lower":
                 if block.issubset(concept):
-                    approximations[-1].update(block)
+                    approximations[decision].update(block)
             elif not block.isdisjoint(concept):
-                approximations[-1].update(block)
+                approximations[decision].update(block)
         # Endfor
     # Endfor
 
-    for index, approx in enumerate(approximations):
+    for index, approx in approximations.items():
         approximations[index] = sorted(approx, key = int)
-
-    if DEBUG:
-        print("Calculated approximations:")
-        listPrint(approximations)
 
     return approximations
 
@@ -419,23 +418,45 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
                 # Endfor
             else:
                 value = float(value)
+                intervalLow = "unset"
+                intervalHigh = "unset"
+                intervalValues = set()
+
+                # Calculate the "common area" for this
                 for key, intervalSet in attrValueDict[attributes[i]].items():
                     interval = key.split("..")
                     interval = [float(i) for i in interval]
 
+                    # If this value is in range of this interval, see if we can tighten with it
                     if value >= interval[0] and value <= interval[1]:
-                        currentResult.update(intervalSet)
+                        # First time set
+                        if intervalLow == "unset":
+                            intervalLow = interval[0]
+                            intervalHigh = interval[1]
+                            intervalValues = intervalSet
+                        # Else, we'll only ever update one side at a time
+                        else:
+                            if interval[0] > intervalLow:
+                                intervalLow = interval[0]
+                            elif interval[1] < intervalHigh:
+                                intervalHigh = interval[1]
+
+                            # Update the values to the tightest interval we have found
+                            intervalValues = intervalValues.intersection(intervalSet)
+                        # Endif
                     # Endif
                 # Endfor
+                # Our current set is then the values in the tightest possible interval
+                currentResult.update(intervalValues)
             # Endif
 
             # If this is the first intersecting set, make it the running result
-            if len(runningResult) == 0:
+            if not runningResult:
                 runningResult = currentResult
-            elif len(currentResult) > 0:
+            elif currentResult:
                 runningResult = set.intersection(runningResult, currentResult)
         # Endfor
-        if len(runningResult) == 0:
+        if not runningResult:
             print("Error, characteristic set is empty.")
         else:
             characteristicSets.append(runningResult)
@@ -490,80 +511,240 @@ def calculateAStar(universe):
 # The function is responsible for taking input attribute value pairs/block and a set of goals in
 # order to determine a set of rules for this dataset. No matter the specification of possible or
 # certain rules, this will produce the desired output given the correct blocks and goals.
-def mlem2(attrValueDict, goals):
-    print("Calculating goals:")
-    listPrint(goals)
+def mlem2(attrValueDict, attrTypes, goals, attrDecision):
+    print("-------------------------------------------------------------\n")
+    print("Rule induction commencing for calculated goals:")
+    listPrint(goals.items())
+    ruleSet = []
 
-    return []
+    # For every concept we're evaluating
+    for decision, originalGoal in goals.items():
+        goal = set(originalGoal)
+        runningBlock = set()
+        rules = collections.OrderedDict()
+
+        # While we haven't found a covering
+        while len(goal) > 0:
+            # Find the intersection in the following priority scheme:
+            #   - Cardinality is maximum
+            #   - Smallest cardinality of the block
+            #   - First pair seen
+            matchedGoal = set()
+            selectionBlock = set()
+
+            for index, (attribute, attrValSet) in enumerate(attrValueDict.items()):
+                for value, t in attrValSet.items():
+                    if ((attrTypes[index] == 1 and attribute not in rules) or
+                        attrTypes[index] == 2):
+                        update = True
+                        temp = t.intersection(goal)
+                        if ((len(temp) > len(matchedGoal)) or
+                            len(temp) == len(matchedGoal) and len(t) < len(selectionBlock)):
+                            if attrTypes[index] == 2:
+                                if attribute not in rules or value not in rules[attribute]:
+                                    update = True
+                                else:
+                                    update = False
+                            if update:
+                                matchedGoal = temp
+                                selectionVal = value
+                                selectionAttr = attribute
+                                selectionBlock = t
+                        # Endif
+                    # Endif
+                # Endfor
+            # Endfor
+
+            # Update our running block
+            if runningBlock:
+                runningBlock = runningBlock.intersection(selectionBlock)
+            else:
+                runningBlock = selectionBlock
+
+            # Append our choice to the rule attributes/values containers
+            if selectionAttr in rules:
+                rules[selectionAttr].append(selectionVal)
+            else:
+                rules[selectionAttr] = [selectionVal]
+
+            if DEBUG:
+                print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
+
+            # If we can make a rule, add it to the ruleset and update the goal to be what's missing
+            if runningBlock.issubset(originalGoal):
+                goal = goal - matchedGoal
+                tossRule = False
+
+                # If we're calculating possible rules, make sure this isn't a certain rule
+                if not __calcCertain__:
+                    for lowerApprox in lowerApproximations.values():
+                        if runningBlock.issubset(lowerApprox):
+                            tossRule = True
+                            break
+                        # Endif
+                    # Endfor
+                # Endif
+
+                if not tossRule:
+                    # Combine numerical intervals to form the smallest interval (and save the
+                    # calculated interval sets for condition dropping below
+                    for key, value in rules.items():
+                        # If the length > 1, it's a numeric value that needs combining
+                        if len(value) > 1:
+                            low = "unset"
+                            high = "unset"
+                            intervalValues = set()
+
+                            # Calculate the "common area" for these conditions
+                            for interval in rules[key]:
+                                tempSet = attrValueDict[key][interval]
+                                edges = interval.split("..")
+                                edges = [float(i) for i in edges]
+                                # First time set
+                                if low == "unset":
+                                    low = edges[0]
+                                    high = edges[1]
+                                    intervalValues = tempSet
+                                # Else, we'll only ever update one side at a time
+                                else:
+                                    if edges[0] > low:
+                                        low = edges[0]
+                                    elif edges[1] < high:
+                                        high = edges[1]
+
+                                    # Update the values to the tightest interval we have found
+                                    intervalValues = intervalValues.intersection(tempSet)
+                                # Endif
+                            # Endfor
+                            newInterval = "{}..{}".format(low, high)
+
+                            # Add this interval set to the attrValueDict for condition dropping
+                            if newInterval not in attrValueDict[key]:
+                                attrValueDict[key][newInterval] = intervalValues
+
+                            rules[key] = [newInterval]
+                        # Endif
+                    # Endfor
+
+                    # Condition dropping --> if we can do without a condition, drop it
+                    for attribute in list(rules):
+                        testBlock = set()
+                        # Find the intersection without this value
+                        for testAttr, testVal in rules.items():
+                            block = attrValueDict[testAttr][testVal[0]]
+                            if testVal != rules[attribute]:
+                                if testBlock:
+                                    testBlock = testBlock.intersection(block)
+                                else:
+                                    testBlock = block
+                            # Endif
+                        # Endfor
+
+                        if len(testBlock) and testBlock.issubset(originalGoal):
+                            rules.pop(attribute, None)
+                        # Endif
+                    # Endfor
+
+                    # Add the new rule (with dropped values) to the ruleset
+                    ruleSet.append([rules, [attrDecision,  decision]])
+                rules = dict()
+                numericRuleVals = dict()
+                runningBlock = set()
+            else:
+                goal = matchedGoal
+        # Endwhile
+    # Endfor
+
+    # Convert the induced rules to a friendly format
+    finalRules = makeFriendlyRules(ruleSet)
+
+    #if DEBUG:
+    ruleStr = "Certain" if __calcCertain__ else "Possible"
+    print("{} rules have been induced:".format(ruleStr))
+    if not finalRules:
+        print("  **No rules were produced of this type.\n")
+    else:
+        listPrint(finalRules)
+
+    printOutput(finalRules)
+
+# Converts a given ruleset containing a list of attributes and values as well as decision values
+# into a friendly rule format matching (attr, value) & ... & (attr, value) -> (d, decision)
+def makeFriendlyRules(ruleSet):
+    friends = []
+
+    # Generate a friendly formatted rule for each rule in the ruleSet
+    for rule in ruleSet:
+        friendlyRule = ""
+        for index, (attribute, value) in enumerate(rule[0].items()):
+            if index != 0:
+                friendlyRule +=" & "
+
+            friendlyRule += "({}, {})".format(attribute, value[0])
+        # Endfor
+        friendlyRule += " -> ({}, {})".format(rule[1][0], rule[1][1])
+
+        friends.append(friendlyRule)
+    # Endfor
+
+    return friends
 
 # Calculates the set of rules based off of user input
 # Choice 1: Calculates the set of certain rules
 # Choice 2: Calculates the set of possible rules
-# Returns the set of rules that were calculated given the user input choice
-def calculateRules(universe, attributes):
-    choice = getRuleType()
-
-    # Determine what types the attributes are
-    concepts = calculateConcepts(universe)
-
-    # Print out the calculated concepts
-    if DEBUG:
-        print("Concepts:")
-        for key, value in concepts.items():
-            print("{}\t: {}".format(key, value))
-        print()
-    # Endif
-
-    attrTypes = attributeTypes(universe, attributes)
-    attrValueDict = collections.OrderedDict()
-
-    # Generate the attribute value pairs and their blocks for both attribute types
-    for index, attrType in enumerate(attrTypes):
-        attrValueDict[attributes[index]] = calculateAVBlocks(universe, index, attrType, attributes[index], concepts)
-    # Endfor
-
-    # Print out the generated attribute value pairs
-    if DEBUG:
-        print(attrValueDict)
-
-    # Calculate the goals for this query (certain vs. possible inside incomplete vs. complete)
-    if not incompleteDataset:
-        aStar = calculateAStar(universe)
-
-        if choice == 1:
-            goals = calculateApprox(aStar, concepts, "lower")
-        else:
-            goals = calculateApprox(aStar, concepts, "upper")
+# Asks the user if they want to optionally calculate the other set of rules (certain vs possible)
+def calculateRules(universe, attributes, attrValueDict, attrTypes, concepts):
+    # Generate the corresponding sets (A* if complete, characteristic sets if not complete)
+    if not __incompleteDataset__:
+        sets = calculateAStar(universe)
     else:
-        characteristicSets = calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts)
+        sets = calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts)
 
-        if choice == 1:
-            goals = calculateApprox(characteristicSets, concepts, "lower")
+    # Ask the user what __calcCertain__ they want to generate.
+    global __calcCertain__
+    __calcCertain__ = getRuleType()
+
+    # Generate lower approximations by default (used by certain and checked against by possible)
+    global lowerApproximations
+    lowerApproximations = calculateApprox(sets, concepts, "lower")
+
+    if __calcCertain__:
+        goals = lowerApproximations
+    else:
+        goals = calculateApprox(sets, concepts, "upper")
+
+    mlem2(attrValueDict, attrTypes, goals, attributes[-1])
+
+    # Ask the user if they want to calculate the other set of rules (certain or possible)
+    # Might as well ask while the memory is hot and all the preprocessing has been done
+    if calculateOtherSet():
+        # Use the other approximations
+        if __calcCertain__:
+            goals = calculateApprox(sets, concepts, "upper")
+            __calcCertain__ = False
         else:
-            goals = calculateApprox(characteristicSets, concepts, "upper")
+            goals = lowerApproximations
+            __calcCertain__ = True
 
-    # Return the calculation of the rules using mlem2
-    return mlem2(attrValueDict, goals)
+        mlem2(attrValueDict, attrTypes, goals, attributes[-1])
+    # Endif
 
 # Prints the output ruleSet to a filename given by the user
 def printOutput(ruleSet):
+    print("-------------------------------------------------------------\n")
     outputFileName = input("What is the name of the output file?\t\t")
-    print("\nOutput file accepted: [{}]\n".format(outputFileName)) 
+    print("\nFile accepted: [{}]; exporting rules...\n".format(outputFileName))
     outputFile = open(outputFileName, "w")
 
     for rule in ruleSet:
         outputFile.write("%s\n" % rule)
 
-    # DEBUG print the ruleset generated at the very end
-    if DEBUG:
-        listPrint(ruleSet)
-
-    print("Ruleset exported to output file [{}].\n".format(outputFileName))
+    print("Rules exported successfully.\n".format(outputFileName))
 
 # The main function of the MLEM2 algorithm program
-# Accepts an inputFileName from the user to parse. Checks if the file can be opened, if so, prompts the
-# user for a calculation method (certain vs possible rulesets). Finally, computes the rulesets
-# using the MLEM2 algorithm.
+# Accepts an __inputFile__ from the user to parse.
+# Prompts user for a type of ruleset to compute (certain rules vs. possible rules)
+# Finally, computes the rulesets using the MLEM2 algorithm.
 #
 # Handles numerical attribute values using the all cutoffs approach
 # Handles missing attribute values using concept approximations
@@ -579,11 +760,30 @@ def main():
     universe = parseFile(attributes)
     print("-------------------------------------------------------------\n")
 
-    # Calculate the rulesets from the universe/attributes
-    ruleSet = calculateRules(universe, attributes)
-    print("-------------------------------------------------------------\n")
+    ###############################################################################################
+    #
+    #   Preprocessing
+    #
+    ###############################################################################################
+    # Store the concepts of this dataset
+    concepts = calculateConcepts(universe)
 
-    # Print the output to the desired file
-    printOutput(ruleSet)
+    #Determine what types the attributes are
+    attrTypes = attributeTypes(universe, attributes)
+    attrValueDict = collections.OrderedDict()
+
+    # Generate the attribute value pairs and their blocks
+    for index, attrType in enumerate(attrTypes):
+        attribute = attributes[index]
+        attrValueDict[attribute] = generateAVBlocks(universe, index, attrType, attribute, concepts)
+    # Endfor
+
+    ###############################################################################################
+    #
+    #   Rule Induction
+    #
+    ###############################################################################################
+    # Calculate the rulesets from the universe/attributes
+    calculateRules(universe, attributes, attrValueDict, attrTypes, concepts)
 
 main()

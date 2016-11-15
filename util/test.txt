@@ -1,3 +1,5 @@
-testfiles/flu.txt
-2
-out.txt
+testfiles/test.txt
+1
+certain.txt
+y
+possible.txt
