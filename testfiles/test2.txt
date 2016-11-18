@@ -1,0 +1,8 @@
+< a a a d >
+[ Temperature Headache Cough Flu ]
+high yes yes yes
+- ? yes yes
+? yes no yes
+normal yes no no
+normal - * no
+* no no no

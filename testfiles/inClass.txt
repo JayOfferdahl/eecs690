@@ -1,0 +1,10 @@
+< a a a d >
+[ Temperature Headache Nausea Flu ]
+100.2 ? no yes
+102.6 yes yes yes
+? no no no
+99.6 yes yes yes
+99.8 ? yes no
+96.4 yes no no
+96.6 no yes no
+? yes ? yes

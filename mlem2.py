@@ -380,7 +380,7 @@ def calculateApprox(sets, concepts, approxType):
 def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
     characteristicSets = []
 
-    for index, case in enumerate(universe):
+    for case in universe:
         runningResult = set()
 
         # For every attribute in the case (not the decision)
@@ -391,31 +391,26 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
             # Don't care and lost cases equate to the universe in this function
             if value == '*' or value == '?':
                 continue
-            # Symbolic values
-            elif attrTypes[i] == 1:
-                # Attribute concept cases 
-                if value == '-':
-                    valuesSpecified = calculateValuesSpecified(universe, i, concepts[case[-1]])
-                    for temp in valuesSpecified:
-                        for key, specifiedSet in attrValueDict[attributes[i]].items():
-                            currentResult.update(specifiedSet)
-                        # Endfor
-                    # Endfor
-                else:
-                    currentResult = attrValueDict[attributes[i]][value]
-            # Numeric values
+            # Attribute concept values
             elif value == '-':
                 valuesSpecified = calculateValuesSpecified(universe, i, concepts[case[-1]])
                 for temp in valuesSpecified:
-                    for key, intervalSet in attrValueDict[attributes[i]].items():
-                        interval = key.split("..")
-                        map(float, interval)
+                    for key, tempSet in attrValueDict[attributes[i]].items():
+                        if attrTypes[i] == 1:
+                            if temp == key:
+                                currentResult.update(tempSet)
+                        else:
+                            interval = key.split("..")
+                            map(float, interval)
 
-                        if temp >= interval[0] and temp <= interval[1]:
-                            currentResult.update(intervalSet)
+                            if temp >= interval[0] and temp <= interval[1]:
+                                currentResult.update(tempSet)
                         # Endif
                     # Endfor
                 # Endfor
+            # Symbolic values
+            elif attrTypes[i] == 1:
+                currentResult = attrValueDict[attributes[i]][value]
             else:
                 value = float(value)
                 intervalLow = "unset"
@@ -469,6 +464,8 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
 
     return characteristicSets
 
+# Determine if the two input cases have all equivalent attributes. Returns false as soon as an
+# attribute doesn't match. If all attributes are checked without failure, return true.
 def equivalentCases(case, caseOther):
     for i in range(0, len(case) - 1):
         if case[i] != caseOther[i]:
@@ -515,11 +512,13 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
     print("-------------------------------------------------------------\n")
     print("Rule induction commencing for calculated goals:")
     listPrint(goals.items())
+
     ruleSet = []
 
     # For every concept we're evaluating
     for decision, originalGoal in goals.items():
         goal = set(originalGoal)
+        remainingGoal = goal
         runningBlock = set()
         rules = collections.OrderedDict()
 
@@ -572,81 +571,74 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
             if runningBlock.issubset(originalGoal):
-                goal = goal - matchedGoal
-                tossRule = False
+                remainingGoal = remainingGoal - runningBlock
+                goal = goal - runningBlock
 
-                # If we're calculating possible rules, make sure this isn't a certain rule
-                if not __calcCertain__:
-                    for lowerApprox in lowerApproximations.values():
-                        if runningBlock.issubset(lowerApprox):
-                            tossRule = True
-                            break
-                        # Endif
-                    # Endfor
-                # Endif
+                if not len(goal):
+                    goal = remainingGoal
 
-                if not tossRule:
-                    # Combine numerical intervals to form the smallest interval (and save the
-                    # calculated interval sets for condition dropping below
-                    for key, value in rules.items():
-                        # If the length > 1, it's a numeric value that needs combining
-                        if len(value) > 1:
-                            low = "unset"
-                            high = "unset"
-                            intervalValues = set()
 
-                            # Calculate the "common area" for these conditions
-                            for interval in rules[key]:
-                                tempSet = attrValueDict[key][interval]
-                                edges = interval.split("..")
-                                edges = [float(i) for i in edges]
-                                # First time set
-                                if low == "unset":
+                # Combine numerical intervals to form the smallest interval (and save the
+                # calculated interval sets for condition dropping below
+                for key, value in rules.items():
+                    # If the length > 1, it's a numeric value that needs combining
+                    if len(value) > 1:
+                        low = "unset"
+                        high = "unset"
+                        intervalValues = set()
+
+                        # Calculate the "common area" for these conditions
+                        for interval in rules[key]:
+                            tempSet = attrValueDict[key][interval]
+                            edges = interval.split("..")
+                            edges = [float(i) for i in edges]
+                            # First time set
+                            if low == "unset":
+                                low = edges[0]
+                                high = edges[1]
+                                intervalValues = tempSet
+                            # Else, we'll only ever update one side at a time
+                            else:
+                                if edges[0] > low:
                                     low = edges[0]
+                                elif edges[1] < high:
                                     high = edges[1]
-                                    intervalValues = tempSet
-                                # Else, we'll only ever update one side at a time
-                                else:
-                                    if edges[0] > low:
-                                        low = edges[0]
-                                    elif edges[1] < high:
-                                        high = edges[1]
 
-                                    # Update the values to the tightest interval we have found
-                                    intervalValues = intervalValues.intersection(tempSet)
-                                # Endif
-                            # Endfor
-                            newInterval = "{}..{}".format(low, high)
-
-                            # Add this interval set to the attrValueDict for condition dropping
-                            if newInterval not in attrValueDict[key]:
-                                attrValueDict[key][newInterval] = intervalValues
-
-                            rules[key] = [newInterval]
-                        # Endif
-                    # Endfor
-
-                    # Condition dropping --> if we can do without a condition, drop it
-                    for attribute in list(rules):
-                        testBlock = set()
-                        # Find the intersection without this value
-                        for testAttr, testVal in rules.items():
-                            block = attrValueDict[testAttr][testVal[0]]
-                            if testVal != rules[attribute]:
-                                if testBlock:
-                                    testBlock = testBlock.intersection(block)
-                                else:
-                                    testBlock = block
+                                # Update the values to the tightest interval we have found
+                                intervalValues = intervalValues.intersection(tempSet)
                             # Endif
                         # Endfor
+                        newInterval = "{}..{}".format(low, high)
 
-                        if len(testBlock) and testBlock.issubset(originalGoal):
-                            rules.pop(attribute, None)
+                        # Add this interval set to the attrValueDict for condition dropping
+                        if newInterval not in attrValueDict[key]:
+                            attrValueDict[key][newInterval] = intervalValues
+
+                        rules[key] = [newInterval]
+                    # Endif
+                # Endfor
+
+                # Condition dropping --> if we can do without a condition, drop it
+                for attribute in list(rules):
+                    testBlock = set()
+                    # Find the intersection without this value
+                    for testAttr, testVal in rules.items():
+                        block = attrValueDict[testAttr][testVal[0]]
+                        if testVal != rules[attribute]:
+                            if testBlock:
+                                testBlock = testBlock.intersection(block)
+                            else:
+                                testBlock = block
                         # Endif
                     # Endfor
 
-                    # Add the new rule (with dropped values) to the ruleset
-                    ruleSet.append([rules, [attrDecision,  decision]])
+                    if len(testBlock) and testBlock.issubset(originalGoal):
+                        rules.pop(attribute, None)
+                    # Endif
+                # Endfor
+
+                # Add the new rule (with dropped values) to the ruleset
+                ruleSet.append([rules, [attrDecision,  decision]])
                 rules = dict()
                 numericRuleVals = dict()
                 runningBlock = set()
@@ -777,6 +769,13 @@ def main():
         attribute = attributes[index]
         attrValueDict[attribute] = generateAVBlocks(universe, index, attrType, attribute, concepts)
     # Endfor
+
+    if DEBUG:
+        for attribute, values in attrValueDict.items():
+            for value, cases in values.items():
+                print("({}, {}){}".format(attribute, value, cases))
+
+        sys.exit()
 
     ###############################################################################################
     #
