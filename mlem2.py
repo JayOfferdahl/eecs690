@@ -524,6 +524,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
         # While we haven't found a covering
         while len(goal) > 0:
+            # print("Incoming goal:",goal)
             # Find the intersection in the following priority scheme:
             #   - Cardinality is maximum
             #   - Smallest cardinality of the block
@@ -540,9 +541,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                         if ((len(temp) > len(matchedGoal)) or
                             len(temp) == len(matchedGoal) and len(t) < len(selectionBlock)):
                             if attrTypes[index] == 2:
-                                if attribute not in rules or value not in rules[attribute]:
-                                    update = True
-                                else:
+                                if attribute in rules and value in rules[attribute]:
                                     update = False
                             if update:
                                 matchedGoal = temp
@@ -566,16 +565,24 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
             else:
                 rules[selectionAttr] = [selectionVal]
 
-            if DEBUG:
-                print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
+            # if DEBUG:
+            # print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
             if runningBlock.issubset(originalGoal):
                 remainingGoal = remainingGoal - runningBlock
+                print("Matched {}, remaining: {}".format(runningBlock, remainingGoal))
+                #print("Previous goal:",goal)
                 goal = goal - runningBlock
 
                 if not len(goal):
                     goal = remainingGoal
+                    if not len(remainingGoal):
+                        print("***Original goal covered!***")
+                    else:
+                        print("***Partially covered original goal, continuing***")
+                else:
+                    print("Current goal update:",goal)
 
 
                 # Combine numerical intervals to form the smallest interval (and save the
@@ -639,7 +646,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
                 # Add the new rule (with dropped values) to the ruleset
                 ruleSet.append([rules, [attrDecision,  decision]])
-                rules = dict()
+                rules = collections.OrderedDict()
                 numericRuleVals = dict()
                 runningBlock = set()
             else:

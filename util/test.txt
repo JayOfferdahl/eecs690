@@ -1,4 +1,4 @@
-testfiles/test.txt
+testfiles/bank-35.txt
 1
 certain.txt
 y
