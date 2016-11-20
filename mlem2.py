@@ -523,7 +523,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
         rules = collections.OrderedDict()
 
         # While we haven't found a covering
-        while len(goal) > 0:
+        while len(goal):
             # print("Incoming goal:",goal)
             # Find the intersection in the following priority scheme:
             #   - Cardinality is maximum
@@ -569,19 +569,22 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
             # print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
-            if runningBlock.issubset(originalGoal):
+            if len(runningBlock) and runningBlock.issubset(originalGoal):
                 remainingGoal = remainingGoal - runningBlock
-                print("Matched {}, remaining: {}".format(runningBlock, remainingGoal))
-                #print("Previous goal:",goal)
                 goal = goal - runningBlock
 
+                if DEBUG:
+                    print("Matched {}, remaining: {}".format(runningBlock, remainingGoal))
+                    print("New values matched here:,",matchedGoal)
                 if not len(goal):
                     goal = remainingGoal
-                    if not len(remainingGoal):
-                        print("***Original goal covered!***")
-                    else:
-                        print("***Partially covered original goal, continuing***")
-                else:
+                    if DEBUG:
+                        if not len(remainingGoal):
+                            print("***Original goal covered!***:")
+                        else:
+                            print("***Partially covered original goal, continuing***")
+                        print()
+                elif DEBUG:
                     print("Current goal update:",goal)
 
 
@@ -645,6 +648,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 # Endfor
 
                 # Add the new rule (with dropped values) to the ruleset
+                # print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
                 ruleSet.append([rules, [attrDecision,  decision]])
                 rules = collections.OrderedDict()
                 numericRuleVals = dict()
@@ -761,7 +765,7 @@ def main():
 
     ###############################################################################################
     #
-    #   Preprocessing
+    #   File Parsing & Attribute Value Block Generation
     #
     ###############################################################################################
     # Store the concepts of this dataset
