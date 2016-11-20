@@ -1,4 +1,4 @@
-testfiles/echo-35.txt
+testfiles/test.txt
 1
 certain.txt
 y

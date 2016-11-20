@@ -12,7 +12,7 @@
 #
 ###################################################################################################
 
-import collections
+from collections import OrderedDict
 import re
 import sys
 import time
@@ -24,6 +24,7 @@ lowerApproximations = None
 
 # Debug flag, if set to 0, all debugging statements will be silenced
 DEBUG = 0
+FASTRULES = 0
 
 # Prints out an enumerable object token by token, separating tokens with a newline.
 # Will print lines with link numbers starting at 0 if PRINT_LINE_NUMBERS is True
@@ -47,7 +48,6 @@ def parseFile(attributes):
             break
         except IOError:
             __inputFile__ = input("Error, the file could not be opened. Try again:\t\t")
-    # Endwhile
 
     print("\nInput file accepted: [{}]\n".format(__inputFile__))
 
@@ -79,7 +79,6 @@ def parseFile(attributes):
                         attributes.append(token)
                     else:
                         print("Error: Token already recognized.\n")
-                # Endif
             elif not skipInput and not readAttrs:
                 # Check here if there are any missing attributes (must check all tokens)
                 if not __incompleteDataset__ and (token == '?' or token == '*' or token == '-'):
@@ -90,13 +89,9 @@ def parseFile(attributes):
                     attr = 0
                     universe.append(currentCase)
                     currentCase = []
-                # Endif
 
                 currentCase.append(token)
                 attr += 1
-            # Endif
-        # Endfor
-    # Endfor
 
     # Append the last currentCase (last line)
     universe.append(currentCase)
@@ -125,7 +120,6 @@ def getRuleType():
                 break
         except ValueError:
             print("Please enter a number.")
-    # Endwhile
 
     rule = "certain" if choice == 1 else "possible"
     print("\nChoice {} accepted; calculating {} rules from input data.\n".format(choice, rule))
@@ -182,8 +176,6 @@ def attributeTypes(universe, attributes):
             case += 1
             if case == len(universe):
                 print("Error: type 3 attribute.\n")
-        # Endwhile
-    # Endfor
 
     print("Attribute types evaluated. There are {} attributes.".format(len(attributes) - 1))
     print("  **{} symbolic attributes, {} numeric attributes.\n".format(type1, type2))
@@ -192,7 +184,7 @@ def attributeTypes(universe, attributes):
 
 # Computes the concepts for the given universe (sets of distinct cases with the same decision)
 def calculateConcepts(universe):
-    concepts = collections.OrderedDict()
+    concepts = OrderedDict()
 
     # For every case in the universe, add the case number to the concept set it belongs
     for index, case in enumerate(universe):
@@ -202,7 +194,6 @@ def calculateConcepts(universe):
             concepts[decision].add(index)
         else:
             concepts[decision] = set([index])
-    # Endfor
 
     # For simplicity, sort each concept
     for key, value in concepts.items():
@@ -220,7 +211,6 @@ def calculateValuesSpecified(universe, attrIndex, concept):
         value = universe[case][attrIndex]
         if value != '-' and value != '?' and value != '*':
             valuesSpecified.add(value)
-    # Endfor
 
     return valuesSpecified
 
@@ -236,7 +226,6 @@ def calculateCutpointAttrValuePairs(universe, attrIndex):
         value = case[attrIndex]
         if value != '-' and value != '?' and value != '*':
             values.add(float(value))
-    # Endfor
 
     # Sort the set of values (at the same time, convert to list)
     values = sorted(values, key = float)
@@ -259,14 +248,13 @@ def pairBlockSeparated(attrValueDict, attribute):
     for key, value in attrValueDict.items():
         attrValuePairs.append("({}, {})".format(attribute, key))
         attrValueBlocks.append(value)
-    # Endfor
 
     #attrValueBlocks.sort()
 
     return [attrValuePairs, attrValueBlocks]
 
 def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
-    attrValueDict = collections.OrderedDict()
+    attrValueDict = OrderedDict()
 
     # If we have a numeric attribute, find the cutpoints and initialize the dictionary
     if attrType == 2:
@@ -279,8 +267,6 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
         for interval in cutpointAttrValuePairs:
             intervalString = "{}..{}".format(interval[0], interval[1])
             attrValueDict[intervalString] = set()
-        # Endfor
-    # Endif
 
     attrConceptVals = []
     dontCareVals = []
@@ -308,15 +294,12 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
                 for interval in cutpointAttrValuePairs:
                     if value >= interval[0] and value <= interval[1]:
                         attrValueDict["{}..{}".format(interval[0], interval[1])].add(row)
-                # Endfor
             # If this symbolic attribute exists in the dictionary, add the case number
             elif value in attrValueDict:
                 attrValueDict[value].add(row)
             # Else, add the newly seen symbolic value as a key in the block table
             else:
                 attrValueDict[value] = set([row])
-        # Endif
-    # Endfor
 
     # If we're dealing with incomplete data, handle those cases here
     if __incompleteDataset__:
@@ -332,16 +315,12 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
                     for interval in cutpointAttrValuePairs:
                         if itemVal >= interval[0] and itemVal <= interval[1]:
                             attrValueDict["{}..{}".format(interval[0], interval[1])].add(case)
-                    # Endfor
                 else:
                     attrValueDict[item].add(case)
-            # Endfor
-        # Endfor
 
         # Add all don't care values to every block
         for item in attrValueDict.values():
             item.update(dontCareVals)
-    # Endif
 
     # Convert the dictionary to two lists: attribute value pairs and attribute value blocks
     # return pairBlockSeparated(attrValueDict, attribute)
@@ -349,7 +328,7 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
 
 # Calculates the approximations of the concepts within the universe
 def calculateApprox(sets, concepts, approxType):
-    approximations = collections.OrderedDict()
+    approximations = OrderedDict()
 
     for decision, concept in concepts.items():
         approximations[decision] = set()
@@ -359,7 +338,6 @@ def calculateApprox(sets, concepts, approxType):
         if __incompleteDataset__:
             for number in concept:
                 currentSets.append(sets[number])
-            # Endfor
         else:
             currentSets = sets
 
@@ -369,13 +347,15 @@ def calculateApprox(sets, concepts, approxType):
                     approximations[decision].update(block)
             elif not block.isdisjoint(concept):
                 approximations[decision].update(block)
-        # Endfor
-    # Endfor
 
     for index, approx in approximations.items():
         approximations[index] = sorted(approx, key = int)
 
     return approximations
+
+def generateFloatInterval(interval):
+    edges = interval.split("..")
+    return [float(i) for i in edges]
 
 def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
     characteristicSets = []
@@ -383,8 +363,8 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
     for case in universe:
         runningResult = set()
 
-        # For every attribute in the case (not the decision)
-        for i in range(0, len(case) - 1):
+        # For every attribute
+        for i in range(0, len(attributes) - 1):
             value = case[i]
             currentResult = set()
 
@@ -400,68 +380,50 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
                             if temp == key:
                                 currentResult.update(tempSet)
                         else:
-                            interval = key.split("..")
-                            map(float, interval)
+                            temp = float(temp)
+                            edges = generateFloatInterval(key)
 
-                            if temp >= interval[0] and temp <= interval[1]:
+                            if edges[0] <= temp <= edges[1]:
                                 currentResult.update(tempSet)
-                        # Endif
-                    # Endfor
-                # Endfor
             # Symbolic values
             elif attrTypes[i] == 1:
                 currentResult = attrValueDict[attributes[i]][value]
             else:
                 value = float(value)
-                intervalLow = "unset"
-                intervalHigh = "unset"
+                low = None
+                high = None
                 intervalValues = set()
 
                 # Calculate the "common area" for this
                 for key, intervalSet in attrValueDict[attributes[i]].items():
-                    interval = key.split("..")
-                    interval = [float(i) for i in interval]
+                    edges = generateFloatInterval(key)
 
                     # If this value is in range of this interval, see if we can tighten with it
-                    if value >= interval[0] and value <= interval[1]:
-                        # First time set
-                        if intervalLow == "unset":
-                            intervalLow = interval[0]
-                            intervalHigh = interval[1]
+                    if edges[0] <= value <= edges[1]:
+                        if low == None:
+                            low, high = edges
                             intervalValues = intervalSet
                         # Else, we'll only ever update one side at a time
                         else:
-                            if interval[0] > intervalLow:
-                                intervalLow = interval[0]
-                            elif interval[1] < intervalHigh:
-                                intervalHigh = interval[1]
+                            low = edges[0] if edges[0] > low else low
+                            high = edges[1] if edges[1] < high else high
 
                             # Update the values to the tightest interval we have found
                             intervalValues = intervalValues.intersection(intervalSet)
-                        # Endif
-                    # Endif
-                # Endfor
                 # Our current set is then the values in the tightest possible interval
                 currentResult.update(intervalValues)
-            # Endif
 
             # If this is the first intersecting set, make it the running result
             if not runningResult:
                 runningResult = currentResult
             elif currentResult:
                 runningResult = set.intersection(runningResult, currentResult)
-        # Endfor
         if not runningResult:
             print("Error, characteristic set is empty.")
         else:
             characteristicSets.append(runningResult)
-    # Endfor
-
-    if DEBUG:
-        print("Characteristic sets:")
-        for index, cSet in enumerate(characteristicSets):
-            print("{}. {}".format(index + 1, cSet))
-
+            if DEBUG:
+                print(runningResult)
     return characteristicSets
 
 # Determine if the two input cases have all equivalent attributes. Returns false as soon as an
@@ -470,8 +432,6 @@ def equivalentCases(case, caseOther):
     for i in range(0, len(case) - 1):
         if case[i] != caseOther[i]:
             return False
-        # Endif
-    # Endfor
 
     return True
 
@@ -492,12 +452,9 @@ def calculateAStar(universe):
                 aSet.append(row)
                 exists = True
                 break
-            # Endif
-        # Endfor
 
         if not exists:
             aStar.append([row])
-    # Endfor
 
     # Convert them to sets
     for index, aSet in enumerate(aStar):
@@ -513,6 +470,11 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
     print("Rule induction commencing for calculated goals:")
     listPrint(goals.items())
 
+    if DEBUG:
+        for ningnong, heehur in attrValueDict.items():
+            for harhee, hoohar in heehur.items():
+                print("{}:{}:{}".format(ningnong, harhee, hoohar))
+
     ruleSet = []
 
     # For every concept we're evaluating
@@ -520,11 +482,10 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
         goal = set(originalGoal)
         remainingGoal = goal
         runningBlock = set()
-        rules = collections.OrderedDict()
+        rules = OrderedDict()
 
         # While we haven't found a covering
         while len(goal):
-            # print("Incoming goal:",goal)
             # Find the intersection in the following priority scheme:
             #   - Cardinality is maximum
             #   - Smallest cardinality of the block
@@ -543,15 +504,37 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                             if attrTypes[index] == 2:
                                 if attribute in rules and value in rules[attribute]:
                                     update = False
+                                # We've seen this attribute, tighten the rule
+                                elif attribute in rules:
+                                    low = "unset"
+                                    high = "unset"
+                                    # Calculate current interval
+                                    for interval in rules[attribute]:
+                                        edges = generateFloatInterval(interval)
+                                        # First time set
+                                        if low == "unset":
+                                            low = edges[0]
+                                            high = edges[1]
+                                        else:
+                                            low = edges[0] if edges[0] > low else low
+                                            high = edges[1] if edges[1] < high else high
+
+                                    # Check if the intervals overlap, if not, don't use this one
+                                    interval = generateFloatInterval(value)
+
+                                    if not (low < interval[0] < high or
+                                            low < interval[1] < high):
+                                        update = False
+                                # We haven't seen this attribute for this running goal, but
+                                # still need to check if we're picking a subset of an existing rule
+                                # elif 
+
+
                             if update:
                                 matchedGoal = temp
                                 selectionVal = value
                                 selectionAttr = attribute
                                 selectionBlock = t
-                        # Endif
-                    # Endif
-                # Endfor
-            # Endfor
 
             # Update our running block
             if runningBlock:
@@ -567,11 +550,84 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
             # if DEBUG:
             # print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
+            # print("Selecting ({}, {})".format(selectionAttr, selectionVal))
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
-            if len(runningBlock) and runningBlock.issubset(originalGoal):
-                remainingGoal = remainingGoal - runningBlock
-                goal = goal - runningBlock
+            if len(runningBlock) and len(matchedGoal) and runningBlock.issubset(originalGoal):
+                if DEBUG:
+                    print("Attempting rule simplification for {}".format(rules))
+                # Combine numerical intervals to form the smallest interval (and save the
+                # calculated interval sets for condition dropping below
+                for key, value in rules.items():
+                    # If the length > 1, it's a numeric value that needs combining
+                    if len(value) > 1:
+                        low = None
+                        high = None
+                        intervalValues = set()
+
+                        # Calculate the "common area" for these conditions
+                        for interval in rules[key]:
+                            tempSet = attrValueDict[key][interval]
+                            edges = generateFloatInterval(interval)
+                            if low == None:
+                                low, high = edges
+                                intervalValues = tempSet
+                            # Else, we'll only ever update one side at a time
+                            else:
+                                # print("{}:{}".format(edges, tempSet))
+                                # print("[{}, {}]:{}".format(low, high, intervalValues))
+                                low = edges[0] if edges[0] > low else low
+                                high = edges[1] if edges[1] < high else high
+
+                                # Update the values to the tightest interval we have found
+                                intervalValues = intervalValues.intersection(tempSet)
+                                # print("[{}, {}]:{}\n".format(low, high, intervalValues))
+                        newInterval = "{}..{}".format(low, high)
+
+                        # Add this interval set to the attrValueDict for condition dropping
+                        if newInterval not in attrValueDict[key]:
+                            attrValueDict[key][newInterval] = intervalValues
+
+                        rules[key] = [newInterval]
+
+                # Condition dropping --> if we can do without a condition, drop it
+                for attribute in list(rules):
+                    testBlock = set()
+                    # Find the intersection without this value
+                    for testAttr, testVal in rules.items():
+                        block = attrValueDict[testAttr][testVal[0]]
+                        if testVal != rules[attribute]:
+                            if testBlock:
+                                testBlock = testBlock.intersection(block)
+                            else:
+                                testBlock = block
+
+                    if len(testBlock) and testBlock.issubset(originalGoal):
+                        rules.pop(attribute, None)
+
+                # After condition dropping, compute the final test block to remove from
+                # the remaining goal (a.k.a. hardest bug to find ever)
+                matchedSet = set()
+                for attribute, key in rules.items():
+                    if DEBUG:
+                        print("{}:{}".format(attribute, key))
+                    block = attrValueDict[attribute][key[0]]
+                    if DEBUG:
+                        print(block)
+                    if len(matchedSet):
+                        matchedSet = matchedSet.intersection(block)
+                    else:
+                        matchedSet = block
+                    if DEBUG:
+                        print(matchedSet)
+                        print()
+
+                remainingGoal = remainingGoal - matchedSet
+                goal = goal - matchedSet
+
+                if DEBUG:
+                    print("We actually matched {}".format(matchedSet))
+                    print(rules)
 
                 if DEBUG:
                     print("Matched {}, remaining: {}".format(runningBlock, remainingGoal))
@@ -587,89 +643,19 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 elif DEBUG:
                     print("Current goal update:",goal)
 
-
-                # Combine numerical intervals to form the smallest interval (and save the
-                # calculated interval sets for condition dropping below
-                for key, value in rules.items():
-                    # If the length > 1, it's a numeric value that needs combining
-                    if len(value) > 1:
-                        low = "unset"
-                        high = "unset"
-                        intervalValues = set()
-
-                        # Calculate the "common area" for these conditions
-                        for interval in rules[key]:
-                            tempSet = attrValueDict[key][interval]
-                            edges = interval.split("..")
-                            edges = [float(i) for i in edges]
-                            # First time set
-                            if low == "unset":
-                                low = edges[0]
-                                high = edges[1]
-                                intervalValues = tempSet
-                            # Else, we'll only ever update one side at a time
-                            else:
-                                if edges[0] > low:
-                                    low = edges[0]
-                                elif edges[1] < high:
-                                    high = edges[1]
-
-                                # Update the values to the tightest interval we have found
-                                intervalValues = intervalValues.intersection(tempSet)
-                            # Endif
-                        # Endfor
-                        newInterval = "{}..{}".format(low, high)
-
-                        # Add this interval set to the attrValueDict for condition dropping
-                        if newInterval not in attrValueDict[key]:
-                            attrValueDict[key][newInterval] = intervalValues
-
-                        rules[key] = [newInterval]
-                    # Endif
-                # Endfor
-
-                # Condition dropping --> if we can do without a condition, drop it
-                for attribute in list(rules):
-                    testBlock = set()
-                    # Find the intersection without this value
-                    for testAttr, testVal in rules.items():
-                        block = attrValueDict[testAttr][testVal[0]]
-                        if testVal != rules[attribute]:
-                            if testBlock:
-                                testBlock = testBlock.intersection(block)
-                            else:
-                                testBlock = block
-                        # Endif
-                    # Endfor
-
-                    if len(testBlock) and testBlock.issubset(originalGoal):
-                        rules.pop(attribute, None)
-                    # Endif
-                # Endfor
-
                 # Add the new rule (with dropped values) to the ruleset
-                # print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
+                if FASTRULES:
+                    print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
+                # print(runningBlock)
                 ruleSet.append([rules, [attrDecision,  decision]])
-                rules = collections.OrderedDict()
+                rules = OrderedDict()
                 numericRuleVals = dict()
                 runningBlock = set()
             else:
                 goal = matchedGoal
-        # Endwhile
-    # Endfor
 
-    # Convert the induced rules to a friendly format
-    finalRules = makeFriendlyRules(ruleSet)
-
-    #if DEBUG:
-    ruleStr = "Certain" if __calcCertain__ else "Possible"
-    print("{} rules have been induced:".format(ruleStr))
-    if not finalRules:
-        print("  **No rules were produced of this type.\n")
-    else:
-        listPrint(finalRules)
-
-    printOutput(finalRules)
+    # Convert the induced rules to a friendly format and output them
+    printOutput(makeFriendlyRules(ruleSet))
 
 # Converts a given ruleset containing a list of attributes and values as well as decision values
 # into a friendly rule format matching (attr, value) & ... & (attr, value) -> (d, decision)
@@ -684,11 +670,9 @@ def makeFriendlyRules(ruleSet):
                 friendlyRule +=" & "
 
             friendlyRule += "({}, {})".format(attribute, value[0])
-        # Endfor
         friendlyRule += " -> ({}, {})".format(rule[1][0], rule[1][1])
 
         friends.append(friendlyRule)
-    # Endfor
 
     return friends
 
@@ -730,10 +714,17 @@ def calculateRules(universe, attributes, attrValueDict, attrTypes, concepts):
             __calcCertain__ = True
 
         mlem2(attrValueDict, attrTypes, goals, attributes[-1])
-    # Endif
 
 # Prints the output ruleSet to a filename given by the user
 def printOutput(ruleSet):
+    # if DEBUG:
+    ruleStr = "Certain" if __calcCertain__ else "Possible"
+    print("{} rules have been induced:".format(ruleStr))
+    if not ruleSet:
+        print("  **No rules were produced of this type.\n")
+    else:
+        listPrint(ruleSet)
+
     print("-------------------------------------------------------------\n")
     outputFileName = input("What is the name of the output file?\t\t")
     print("\nFile accepted: [{}]; exporting rules...\n".format(outputFileName))
@@ -757,7 +748,7 @@ def main():
     print("|                                                           |")
     print("|              EECS690 - Data Mining Fall 2016              |")
     print("-------------------------------------------------------------") 
-    
+
     # Store all of the input data in the attributes/universe structures
     attributes = []
     universe = parseFile(attributes)
@@ -773,13 +764,12 @@ def main():
 
     #Determine what types the attributes are
     attrTypes = attributeTypes(universe, attributes)
-    attrValueDict = collections.OrderedDict()
+    attrValueDict = OrderedDict()
 
     # Generate the attribute value pairs and their blocks
     for index, attrType in enumerate(attrTypes):
         attribute = attributes[index]
         attrValueDict[attribute] = generateAVBlocks(universe, index, attrType, attribute, concepts)
-    # Endfor
 
     if DEBUG:
         for attribute, values in attrValueDict.items():
