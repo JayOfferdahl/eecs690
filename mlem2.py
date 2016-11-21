@@ -17,14 +17,17 @@ import re
 import sys
 import time
 
-__inputFile__ = ""
+__inputFile__ = None
+__inputFileName__ = ""
+__outputFile__ = None
+__outputFileName__ = ""
 __calcCertain__ = False
 __incompleteDataset__ = False
-lowerApproximations = None
 
-# Debug flag, if set to 0, all debugging statements will be silenced
+# Output flags --> set to 1 if output is desired
 DEBUG = 0
 FASTRULES = 0
+STATUSINFO = 1
 
 # Prints out an enumerable object token by token, separating tokens with a newline.
 # Will print lines with link numbers starting at 0 if PRINT_LINE_NUMBERS is True
@@ -33,23 +36,40 @@ def listPrint(lst):
     for token in lst: print(token)
     print()
 
+# Prompts the user for valid input until the input filename can be opened.
+def checkFile(fileName):
+    while True:
+        try:
+            file = open(fileName)
+            break
+        except IOError:
+            fileName = input("Error, the file could not be opened. Try again:\t\t")
+    file.close()
+
+    if STATUSINFO:
+        print("\nFile accepted: [{}]".format(fileName))
+    print()
+    return fileName
+
+# Prompts the user for the input/output filenames and checks if they're valid, also gets rule type
+def userInput():
+    global __inputFileName__
+    __inputFileName__ = checkFile(input("\nWhat is the name of the input dataset file?\t"))
+
+    # Ask the user what type of rules (certain or possible) they want to generate.
+    getRuleType()
+
+    global __outputFileName__
+    __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"))
+
 # Parses the input file and stores all relevant information for parsing.
 # Modifies the array of cases to include the universe of cases
 #   Each case has a list of indicies to a dictionary key which specifies the value of the attribute
 # Modifies the dictionary of attributes to include all attributes values seen
 def parseFile(attributes):
-    global __inputFile__
     global __incompleteDataset__
-    __inputFile__= input("\nWhat is the name of the input dataset file?\t")
 
-    while True:
-        try:
-            file = open(__inputFile__)
-            break
-        except IOError:
-            __inputFile__ = input("Error, the file could not be opened. Try again:\t\t")
-
-    print("\nInput file accepted: [{}]\n".format(__inputFile__))
+    inputFile = open(__inputFileName__)
 
     # Parse the input file to generate the universe of cases
     skipInput = True
@@ -59,7 +79,7 @@ def parseFile(attributes):
     attr = 0
 
     # Skip the < a ... a d > descriptors, read in attribute names/decision name
-    for line in file:
+    for line in inputFile:
         tokens = line.split()
 
         for token in tokens:
@@ -78,7 +98,9 @@ def parseFile(attributes):
                     if token not in attributes:
                         attributes.append(token)
                     else:
-                        print("Error: Token already recognized.\n")
+                        # Duplicate token, invalid dataset.
+                        print("Error [Invalid dataset]: Token already recognized.\n")
+                        sys.exit()
             elif not skipInput and not readAttrs:
                 # Check here if there are any missing attributes (must check all tokens)
                 if not __incompleteDataset__ and (token == '?' or token == '*' or token == '-'):
@@ -92,16 +114,14 @@ def parseFile(attributes):
 
                 currentCase.append(token)
                 attr += 1
-
     # Append the last currentCase (last line)
     universe.append(currentCase)
 
-    print("Input file parsed. There are {} total cases.".format(len(universe)))
+    if STATUSINFO:
+        print("Input file parsed. There are {} total cases.".format(len(universe)))
+        if __incompleteDataset__:
+            print("  **This dataset is incomplete; using concept approximations.\n")
 
-    if __incompleteDataset__:
-        print("  **This dataset is incomplete; using concept approximations.\n")
-
-    # return the input dataset
     return universe
 
 # Captures user input to determine which rule type to calculate
@@ -115,35 +135,36 @@ def getRuleType():
     while True:
         try:
             choice = int(input("Choice: "))
-
-            if choice >= 1 and choice <= 2:
+            if 1 <= choice <= 2:
                 break
         except ValueError:
             print("Please enter a number.")
-
     rule = "certain" if choice == 1 else "possible"
-    print("\nChoice {} accepted; calculating {} rules from input data.\n".format(choice, rule))
 
-    return choice == 1
+    if STATUSINFO:
+        print("\nChoice {} accepted; calculating {} rules from input data.\n".format(choice, rule))
+
+    global __calcCertain__
+    __calcCertain__ = choice == 1
 
 # Prompt the user to determine if the other ruleset should be calculated. For example, if the user
 # originally requested certain rules, a "y" here means they also want to calculate possible rules.
 def calculateOtherSet():
     rulesOther = "possible" if __calcCertain__ else "certain"
-    print("-------------------------------------------------------------\n")
-    calculateOtherSet = input("Do you want to also calculate {} rules? (y/n)\n\n".format(rulesOther))
+    calculateOtherSet = input("Calculate {} rules as well? (y/n) ".format(rulesOther))
+    print()
 
     # If yes, back out and calculate
     if calculateOtherSet == 'y' or calculateOtherSet == 'Y':
+        global __outputFileName__
+        __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"))
         return True
-    # Else, we're done here
-    else:
-        sys.exit()
+    return False
 
 # Determine what type each attribute belongs to
 # Type 1: Symbolic
 # Type 2: Numeric
-# Type 3: Missing (If this happens, the attribute should be tossed!)
+# Type 3: Missing (A type 3 attribute confirms invalid input and exits the program)
 # Returns a list of the attribute types
 def attributeTypes(universe, attributes):
     types = []
@@ -166,7 +187,6 @@ def attributeTypes(universe, attributes):
                 types.append(1)
                 type1 += 1
                 break
-
             match = re.fullmatch(decimal, attr)
             if match != None:
                 types.append(2)
@@ -175,10 +195,12 @@ def attributeTypes(universe, attributes):
 
             case += 1
             if case == len(universe):
-                print("Error: type 3 attribute.\n")
+                print("Error [Invalid dataset]: type 3 attribute.\n")
+                sys.exit()
 
-    print("Attribute types evaluated. There are {} attributes.".format(len(attributes) - 1))
-    print("  **{} symbolic attributes, {} numeric attributes.\n".format(type1, type2))
+    if STATUSINFO:
+        print("Attribute types evaluated. There are {} attributes.".format(len(attributes) - 1))
+        print("  **{} symbolic attributes, {} numeric attributes.\n".format(type1, type2))
 
     return types
 
@@ -214,10 +236,8 @@ def calculateValuesSpecified(universe, attrIndex, concept):
 
     return valuesSpecified
 
-
 # Calculates the cutpoints of the numeric attribute at attribute index attrIndex of the universe
-# Returns a list of pairs which the first value is the lower, and the second value is the upper
-# of the block.
+# Returns a list of pairs: index 0 is the lower bound, index 1 is the upper bound of the interval
 def calculateCutpointAttrValuePairs(universe, attrIndex):
     values = set()
 
@@ -249,8 +269,6 @@ def pairBlockSeparated(attrValueDict, attribute):
         attrValuePairs.append("({}, {})".format(attribute, key))
         attrValueBlocks.append(value)
 
-    #attrValueBlocks.sort()
-
     return [attrValuePairs, attrValueBlocks]
 
 def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
@@ -258,11 +276,7 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
 
     # If we have a numeric attribute, find the cutpoints and initialize the dictionary
     if attrType == 2:
-        # First, calculate the cutpoints and sort them
         cutpointAttrValuePairs = calculateCutpointAttrValuePairs(universe, attrIndex)
-
-        if DEBUG:
-            print("Cutpoints calculated for attribute [{}]".format(attribute))
 
         for interval in cutpointAttrValuePairs:
             intervalString = "{}..{}".format(interval[0], interval[1])
@@ -317,13 +331,10 @@ def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
                             attrValueDict["{}..{}".format(interval[0], interval[1])].add(case)
                 else:
                     attrValueDict[item].add(case)
-
         # Add all don't care values to every block
         for item in attrValueDict.values():
             item.update(dontCareVals)
 
-    # Convert the dictionary to two lists: attribute value pairs and attribute value blocks
-    # return pairBlockSeparated(attrValueDict, attribute)
     return attrValueDict
 
 # Calculates the approximations of the concepts within the universe
@@ -347,10 +358,6 @@ def calculateApprox(sets, concepts, approxType):
                     approximations[decision].update(block)
             elif not block.isdisjoint(concept):
                 approximations[decision].update(block)
-
-    for index, approx in approximations.items():
-        approximations[index] = sorted(approx, key = int)
-
     return approximations
 
 def generateFloatInterval(interval):
@@ -390,9 +397,6 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
                 currentResult = attrValueDict[attributes[i]][value]
             else:
                 value = float(value)
-                low = None
-                high = None
-                intervalValues = set()
 
                 # Calculate the "common area" for this
                 for key, intervalSet in attrValueDict[attributes[i]].items():
@@ -400,19 +404,7 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
 
                     # If this value is in range of this interval, see if we can tighten with it
                     if edges[0] <= value <= edges[1]:
-                        if low == None:
-                            low, high = edges
-                            intervalValues = intervalSet
-                        # Else, we'll only ever update one side at a time
-                        else:
-                            low = edges[0] if edges[0] > low else low
-                            high = edges[1] if edges[1] < high else high
-
-                            # Update the values to the tightest interval we have found
-                            intervalValues = intervalValues.intersection(intervalSet)
-                # Our current set is then the values in the tightest possible interval
-                currentResult.update(intervalValues)
-
+                        currentResult.update(intervalSet)
             # If this is the first intersecting set, make it the running result
             if not runningResult:
                 runningResult = currentResult
@@ -422,8 +414,6 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
             print("Error, characteristic set is empty.")
         else:
             characteristicSets.append(runningResult)
-            if DEBUG:
-                print(runningResult)
     return characteristicSets
 
 # Determine if the two input cases have all equivalent attributes. Returns false as soon as an
@@ -432,7 +422,6 @@ def equivalentCases(case, caseOther):
     for i in range(0, len(case) - 1):
         if case[i] != caseOther[i]:
             return False
-
     return True
 
 # Calculates A* for the given universe. This function parses each case to determine duplicate
@@ -445,17 +434,14 @@ def calculateAStar(universe):
     for row, case in enumerate(universe):
         exists = False
 
-        # For every exisitng A* set, check if this case matches one defined
-        # If so, add it to that A* subset and breakout
+        # For every exisitng A* set, check if this case matches a defined one (Add it if it does)
         for aSet in aStar:
             if equivalentCases(case, universe[aSet[0]]):
                 aSet.append(row)
                 exists = True
                 break
-
         if not exists:
             aStar.append([row])
-
     # Convert them to sets
     for index, aSet in enumerate(aStar):
         aStar[index] = set(aSet)
@@ -466,23 +452,28 @@ def calculateAStar(universe):
 # order to determine a set of rules for this dataset. No matter the specification of possible or
 # certain rules, this will produce the desired output given the correct blocks and goals.
 def mlem2(attrValueDict, attrTypes, goals, attrDecision):
-    print("-------------------------------------------------------------\n")
-    print("Rule induction commencing for calculated goals:")
-    listPrint(goals.items())
-
-    if DEBUG:
-        for ningnong, heehur in attrValueDict.items():
-            for harhee, hoohar in heehur.items():
-                print("{}:{}:{}".format(ningnong, harhee, hoohar))
+    if STATUSINFO:
+        print("-------------------------------------------------------------\n")
+        print("Rule induction commencing for calculated goals:")
+        listPrint(goals.items())
 
     ruleSet = []
 
     # For every concept we're evaluating
     for decision, originalGoal in goals.items():
         goal = set(originalGoal)
+        goalSize = len(goal)
+        goalCompleted = 0
         remainingGoal = goal
         runningBlock = set()
         rules = OrderedDict()
+
+        if goal and STATUSINFO:
+            print("Calculating rules for [{}]".format(decision))
+            print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
+            for i in range(59):
+                print(" ", end = "", flush = True)
+            print("]", end = "", flush = True)
 
         # While we haven't found a covering
         while len(goal):
@@ -522,14 +513,8 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                                     # Check if the intervals overlap, if not, don't use this one
                                     interval = generateFloatInterval(value)
 
-                                    if not (low < interval[0] < high or
-                                            low < interval[1] < high):
+                                    if not (low < interval[0] < high or low < interval[1] < high):
                                         update = False
-                                # We haven't seen this attribute for this running goal, but
-                                # still need to check if we're picking a subset of an existing rule
-                                # elif 
-
-
                             if update:
                                 matchedGoal = temp
                                 selectionVal = value
@@ -548,12 +533,12 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
             else:
                 rules[selectionAttr] = [selectionVal]
 
-            # if DEBUG:
-            # print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
-            # print("Selecting ({}, {})".format(selectionAttr, selectionVal))
+            if DEBUG:
+                print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
+                print("Selecting ({}, {})".format(selectionAttr, selectionVal))
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
-            if len(runningBlock) and len(matchedGoal) and runningBlock.issubset(originalGoal):
+            if len(runningBlock) and runningBlock.issubset(originalGoal):
                 if DEBUG:
                     print("Attempting rule simplification for {}".format(rules))
                 # Combine numerical intervals to form the smallest interval (and save the
@@ -574,17 +559,13 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                                 intervalValues = tempSet
                             # Else, we'll only ever update one side at a time
                             else:
-                                # print("{}:{}".format(edges, tempSet))
-                                # print("[{}, {}]:{}".format(low, high, intervalValues))
                                 low = edges[0] if edges[0] > low else low
                                 high = edges[1] if edges[1] < high else high
 
                                 # Update the values to the tightest interval we have found
                                 intervalValues = intervalValues.intersection(tempSet)
-                                # print("[{}, {}]:{}\n".format(low, high, intervalValues))
-                        newInterval = "{}..{}".format(low, high)
-
                         # Add this interval set to the attrValueDict for condition dropping
+                        newInterval = "{}..{}".format(low, high)
                         if newInterval not in attrValueDict[key]:
                             attrValueDict[key][newInterval] = intervalValues
 
@@ -622,6 +603,17 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                         print(matchedSet)
                         print()
 
+                if STATUSINFO:
+                    newMatches = remainingGoal.intersection(matchedSet)
+                    goalCompleted += len(newMatches)
+                    print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
+                    calc = int(goalCompleted / goalSize * 59)
+                    for i in range(calc):
+                        print("=", end = "", flush = True)
+                    for i in range(59 - calc):
+                        print(" ", end = "", flush = True)
+                    print("]", end = "", flush = True)
+
                 remainingGoal = remainingGoal - matchedSet
                 goal = goal - matchedSet
 
@@ -646,13 +638,15 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 # Add the new rule (with dropped values) to the ruleset
                 if FASTRULES:
                     print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
-                # print(runningBlock)
                 ruleSet.append([rules, [attrDecision,  decision]])
                 rules = OrderedDict()
                 numericRuleVals = dict()
                 runningBlock = set()
             else:
                 goal = matchedGoal
+
+        if STATUSINFO:
+            print("\n")
 
     # Convert the induced rules to a friendly format and output them
     printOutput(makeFriendlyRules(ruleSet))
@@ -668,7 +662,6 @@ def makeFriendlyRules(ruleSet):
         for index, (attribute, value) in enumerate(rule[0].items()):
             if index != 0:
                 friendlyRule +=" & "
-
             friendlyRule += "({}, {})".format(attribute, value[0])
         friendlyRule += " -> ({}, {})".format(rule[1][0], rule[1][1])
 
@@ -676,10 +669,7 @@ def makeFriendlyRules(ruleSet):
 
     return friends
 
-# Calculates the set of rules based off of user input
-# Choice 1: Calculates the set of certain rules
-# Choice 2: Calculates the set of possible rules
-# Asks the user if they want to optionally calculate the other set of rules (certain vs possible)
+# Calculates the set of rules using calculated approximations and the MLEM2 algorithm
 def calculateRules(universe, attributes, attrValueDict, attrTypes, concepts):
     # Generate the corresponding sets (A* if complete, characteristic sets if not complete)
     if not __incompleteDataset__:
@@ -687,78 +677,54 @@ def calculateRules(universe, attributes, attrValueDict, attrTypes, concepts):
     else:
         sets = calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts)
 
-    # Ask the user what __calcCertain__ they want to generate.
     global __calcCertain__
-    __calcCertain__ = getRuleType()
-
-    # Generate lower approximations by default (used by certain and checked against by possible)
-    global lowerApproximations
-    lowerApproximations = calculateApprox(sets, concepts, "lower")
-
-    if __calcCertain__:
-        goals = lowerApproximations
-    else:
-        goals = calculateApprox(sets, concepts, "upper")
-
+    approxType = "lower" if __calcCertain__ else "upper"
+    goals = calculateApprox(sets, concepts, approxType)
     mlem2(attrValueDict, attrTypes, goals, attributes[-1])
 
     # Ask the user if they want to calculate the other set of rules (certain or possible)
-    # Might as well ask while the memory is hot and all the preprocessing has been done
     if calculateOtherSet():
-        # Use the other approximations
-        if __calcCertain__:
-            goals = calculateApprox(sets, concepts, "upper")
-            __calcCertain__ = False
-        else:
-            goals = lowerApproximations
-            __calcCertain__ = True
-
+        approxType = "upper" if __calcCertain__ else "lower"
+        goals = calculateApprox(sets, concepts, approxType)
+        __calcCertain__ = not __calcCertain__
         mlem2(attrValueDict, attrTypes, goals, attributes[-1])
 
 # Prints the output ruleSet to a filename given by the user
 def printOutput(ruleSet):
-    # if DEBUG:
-    ruleStr = "Certain" if __calcCertain__ else "Possible"
-    print("{} rules have been induced:".format(ruleStr))
-    if not ruleSet:
-        print("  **No rules were produced of this type.\n")
-    else:
-        listPrint(ruleSet)
+    if STATUSINFO:
+        ruleStr = "Certain" if __calcCertain__ else "Possible"
+        print("{} rules have been induced:".format(ruleStr))
+        if not ruleSet:
+            print("  **No rules were produced of this type.\n")
+        else:
+            listPrint(ruleSet)
 
-    print("-------------------------------------------------------------\n")
-    outputFileName = input("What is the name of the output file?\t\t")
-    print("\nFile accepted: [{}]; exporting rules...\n".format(outputFileName))
-    outputFile = open(outputFileName, "w")
+    outputFile = open(__outputFileName__, "w")
 
     for rule in ruleSet:
         outputFile.write("%s\n" % rule)
 
-    print("Rules exported successfully.\n".format(outputFileName))
+    if STATUSINFO: print("Rules exported successfully.\n".format(__outputFileName__))
 
 # The main function of the MLEM2 algorithm program
-# Accepts an __inputFile__ from the user to parse.
-# Prompts user for a type of ruleset to compute (certain rules vs. possible rules)
-# Finally, computes the rulesets using the MLEM2 algorithm.
+# Accepts an __inputFileName__ from the user to parse. Prompts user for a type of ruleset to compute
+# (certain rules vs. possible rules). Finally, computes the rulesets using the MLEM2 algorithm.
 #
 # Handles numerical attribute values using the all cutoffs approach
 # Handles missing attribute values using concept approximations
 def main():
-    print("-------------------------------------------------------------") 
+    print("-------------------------------------------------------------")
     print("|              Welcome to Jay's MLEM2 Program!              |")
     print("|                                                           |")
     print("|              EECS690 - Data Mining Fall 2016              |")
-    print("-------------------------------------------------------------") 
+    print("-------------------------------------------------------------")
 
-    # Store all of the input data in the attributes/universe structures
+    # Ask the user for input/output file names and rule types to calculate
+    userInput()
+
     attributes = []
     universe = parseFile(attributes)
-    print("-------------------------------------------------------------\n")
 
-    ###############################################################################################
-    #
-    #   File Parsing & Attribute Value Block Generation
-    #
-    ###############################################################################################
     # Store the concepts of this dataset
     concepts = calculateConcepts(universe)
 
@@ -771,18 +737,6 @@ def main():
         attribute = attributes[index]
         attrValueDict[attribute] = generateAVBlocks(universe, index, attrType, attribute, concepts)
 
-    if DEBUG:
-        for attribute, values in attrValueDict.items():
-            for value, cases in values.items():
-                print("({}, {}){}".format(attribute, value, cases))
-
-        sys.exit()
-
-    ###############################################################################################
-    #
-    #   Rule Induction
-    #
-    ###############################################################################################
     # Calculate the rulesets from the universe/attributes
     calculateRules(universe, attributes, attrValueDict, attrTypes, concepts)
 
