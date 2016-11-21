@@ -1,4 +1,4 @@
-testfiles/flu.txt
+testfiles/common_combined_lers.txt
 1
 certain.txt
 y

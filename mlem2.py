@@ -414,6 +414,7 @@ def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
             print("Error, characteristic set is empty.")
         else:
             characteristicSets.append(runningResult)
+
     return characteristicSets
 
 # Determine if the two input cases have all equivalent attributes. Returns false as soon as an
@@ -448,6 +449,111 @@ def calculateAStar(universe):
 
     return aStar
 
+def calculateInterval(intervals):
+    low = "unset"
+    high = "unset"
+
+    for interval in intervals:
+        edges = generateFloatInterval(interval)
+        # First time set
+        if low == "unset":
+            low = edges[0]
+            high = edges[1]
+        else:
+            low = edges[0] if edges[0] > low else low
+            high = edges[1] if edges[1] < high else high
+
+    return [low, high]
+
+# Combine numerical intervals to form the smallest interval (and save the
+# calculated interval sets for condition dropping below
+def compressIntervals(rules, attrValueDict):
+    for key, value in rules.items():
+        # If the length > 1, it's a numeric value that needs combining
+        if len(value) > 1:
+            low = None
+            high = None
+            intervalValues = set()
+
+            # Calculate the "common area" for these conditions
+            for interval in rules[key]:
+                tempSet = attrValueDict[key][interval]
+                edges = generateFloatInterval(interval)
+                if low == None:
+                    low, high = edges
+                    intervalValues = tempSet
+                # Else, we'll only ever update one side at a time
+                else:
+                    low = edges[0] if edges[0] > low else low
+                    high = edges[1] if edges[1] < high else high
+
+                    # Update the values to the tightest interval we have found
+                    intervalValues = intervalValues.intersection(tempSet)
+            # Add this interval set to the attrValueDict for condition dropping
+            newInterval = "{}..{}".format(low, high)
+            if newInterval not in attrValueDict[key]:
+                attrValueDict[key][newInterval] = intervalValues
+
+            rules[key] = [newInterval]
+
+# Condition dropping --> if we can do without a condition, drop it
+def dropConditions(rules, attrValueDict, originalGoal):
+    for attribute in list(rules):
+        testBlock = set()
+        # Find the intersection without this value
+        for testAttr, testVal in rules.items():
+            block = attrValueDict[testAttr][testVal[0]]
+            if testVal != rules[attribute]:
+                if testBlock:
+                    testBlock = testBlock.intersection(block)
+                else:
+                    testBlock = block
+
+        if len(testBlock) and testBlock.issubset(originalGoal):
+            rules.pop(attribute, None)
+
+# After condition dropping, compute the final test block to remove from
+# the remaining goal (a.k.a. hardest bug to find ever)
+def calculateCoverage(rules, attrValueDict):
+    matchedSet = set()
+    for attribute, key in rules.items():
+        block = set(attrValueDict[attribute][key[0]])
+        if len(matchedSet):
+            matchedSet = matchedSet.intersection(block)
+        else:
+            matchedSet = block
+
+    return matchedSet
+
+def calcLargestAVIntersection(attrValueDict, rules, goal):
+    match = OrderedDict()
+    match["intersection"] = set()
+    match["value"] = None
+    match["attribute"] = None
+    match["matchBlock"] = set()
+
+    for index, (attribute, attrValSet) in enumerate(attrValueDict.items()):
+        for value, t in attrValSet.items():
+            if attribute not in rules or value not in rules[attribute]:
+                temp = t.intersection(goal)
+                if ((len(temp) > len(match["intersection"])) or
+                    (len(temp) == len(match["intersection"]) and len(t) < len(match["matchBlock"]))):
+                    match["intersection"] = temp
+                    match["value"] = value
+                    match["attribute"] = attribute
+                    match["matchBlock"] = t
+    match["intersection"] = set(sorted(match["intersection"], key = int))
+    return match
+
+def goalStatus(goalCompleted, goalSize):
+    print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
+    calc = int(goalCompleted / goalSize * 51)
+    for i in range(calc):
+        print("=", end = "", flush = True)
+    for i in range(51 - calc):
+        print(" ", end = "", flush = True)
+    print("]", end = "", flush = True)
+
 # The function is responsible for taking input attribute value pairs/block and a set of goals in
 # order to determine a set of rules for this dataset. No matter the specification of possible or
 # certain rules, this will produce the desired output given the correct blocks and goals.
@@ -470,156 +576,64 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
         if goal and STATUSINFO:
             print("Calculating rules for [{}]".format(decision))
-            print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
-            for i in range(51):
-                print(" ", end = "", flush = True)
-            print("]", end = "", flush = True)
+            goalStatus(goalCompleted, goalSize)
 
         # While we haven't found a covering
-        while len(goal):
-            # Find the intersection in the following priority scheme:
-            #   - Cardinality is maximum
-            #   - Smallest cardinality of the block
-            #   - First pair seen
-            matchedGoal = set()
-            selectionBlock = set()
-
-            for index, (attribute, attrValSet) in enumerate(attrValueDict.items()):
-                for value, t in attrValSet.items():
-                    if ((attrTypes[index] == 1 and attribute not in rules) or
-                        attrTypes[index] == 2):
-                        update = True
-                        temp = t.intersection(goal)
-                        if ((len(temp) > len(matchedGoal)) or
-                            len(temp) == len(matchedGoal) and len(t) < len(selectionBlock)):
-                            if attrTypes[index] == 2:
-                                if attribute in rules and value in rules[attribute]:
-                                    update = False
-                                # We've seen this attribute, tighten the rule
-                                elif attribute in rules:
-                                    low = "unset"
-                                    high = "unset"
-                                    # Calculate current interval
-                                    for interval in rules[attribute]:
-                                        edges = generateFloatInterval(interval)
-                                        # First time set
-                                        if low == "unset":
-                                            low = edges[0]
-                                            high = edges[1]
-                                        else:
-                                            low = edges[0] if edges[0] > low else low
-                                            high = edges[1] if edges[1] < high else high
-
-                                    # Check if the intervals overlap, if not, don't use this one
-                                    interval = generateFloatInterval(value)
-
-                                    if not (low < interval[0] < high or low < interval[1] < high):
-                                        update = False
-                            if update:
-                                matchedGoal = temp
-                                selectionVal = value
-                                selectionAttr = attribute
-                                selectionBlock = t
+        while len(remainingGoal):
+            # m has four values
+            # "intersection" - the intersection of the best match with the current goal
+            # "value"        - the value of the attribute
+            # "attribute"    - the attribute of this condition
+            # "matchBlock"   - the entire block of the AV pair
+            m = calcLargestAVIntersection(attrValueDict, rules, goal)
 
             # Update our running block
             if runningBlock:
-                runningBlock = runningBlock.intersection(selectionBlock)
+                runningBlock = runningBlock.intersection(m["matchBlock"])
             else:
-                runningBlock = selectionBlock
+                runningBlock = m["matchBlock"]
 
             # Append our choice to the rule attributes/values containers
-            if selectionAttr in rules:
-                rules[selectionAttr].append(selectionVal)
+            if m["attribute"] in rules:
+                rules[m["attribute"]].append(m["value"])
             else:
-                rules[selectionAttr] = [selectionVal]
+                rules[m["attribute"]] = [m["value"]]
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
-            if len(runningBlock) and runningBlock.issubset(originalGoal):
-                # Combine numerical intervals to form the smallest interval (and save the
-                # calculated interval sets for condition dropping below
-                for key, value in rules.items():
-                    # If the length > 1, it's a numeric value that needs combining
-                    if len(value) > 1:
-                        low = None
-                        high = None
-                        intervalValues = set()
+            if runningBlock.issubset(originalGoal):
+                if len(runningBlock) == 0:
+                    print("Empty running block, exiting")
+                    sys.exit()
+                # Reduce intervals down to one instead of many
+                compressIntervals(rules, attrValueDict)
+                # Drop any conditions that are unnecessary
+                dropConditions(rules, attrValueDict, originalGoal)
 
-                        # Calculate the "common area" for these conditions
-                        for interval in rules[key]:
-                            tempSet = attrValueDict[key][interval]
-                            edges = generateFloatInterval(interval)
-                            if low == None:
-                                low, high = edges
-                                intervalValues = tempSet
-                            # Else, we'll only ever update one side at a time
-                            else:
-                                low = edges[0] if edges[0] > low else low
-                                high = edges[1] if edges[1] < high else high
-
-                                # Update the values to the tightest interval we have found
-                                intervalValues = intervalValues.intersection(tempSet)
-                        # Add this interval set to the attrValueDict for condition dropping
-                        newInterval = "{}..{}".format(low, high)
-                        if newInterval not in attrValueDict[key]:
-                            attrValueDict[key][newInterval] = intervalValues
-
-                        rules[key] = [newInterval]
-
-                # Condition dropping --> if we can do without a condition, drop it
-                for attribute in list(rules):
-                    testBlock = set()
-                    # Find the intersection without this value
-                    for testAttr, testVal in rules.items():
-                        block = attrValueDict[testAttr][testVal[0]]
-                        if testVal != rules[attribute]:
-                            if testBlock:
-                                testBlock = testBlock.intersection(block)
-                            else:
-                                testBlock = block
-
-                    if len(testBlock) and testBlock.issubset(originalGoal):
-                        rules.pop(attribute, None)
-
-                # After condition dropping, compute the final test block to remove from
-                # the remaining goal (a.k.a. hardest bug to find ever)
-                matchedSet = set()
-                for attribute, key in rules.items():
-                    block = attrValueDict[attribute][key[0]]
-                    if len(matchedSet):
-                        matchedSet = matchedSet.intersection(block)
-                    else:
-                        matchedSet = block
+                # Calculate what our final rule covers
+                match = calculateCoverage(rules, attrValueDict)
 
                 if STATUSINFO:
-                    newMatches = remainingGoal.intersection(matchedSet)
-                    goalCompleted += len(newMatches)
-                    print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
-                    calc = int(goalCompleted / goalSize * 51)
-                    for i in range(calc):
-                        print("=", end = "", flush = True)
-                    for i in range(51 - calc):
-                        print(" ", end = "", flush = True)
-                    print("]", end = "", flush = True)
+                    goalCompleted += len(remainingGoal.intersection(match))
+                    goalStatus(goalCompleted, goalSize)
 
-                remainingGoal = remainingGoal - matchedSet
-                goal = goal - matchedSet
-
-                if not len(goal):
-                    goal = remainingGoal
+                remainingGoal = remainingGoal - match
+                goal = remainingGoal
 
                 # Add the new rule (with dropped values) to the ruleset
                 if FASTRULES:
                     print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
+
                 ruleSet.append([rules, [attrDecision,  decision]])
                 rules = OrderedDict()
-                numericRuleVals = dict()
                 runningBlock = set()
             else:
-                goal = matchedGoal
+                goal = m["intersection"]
+                if len(goal) == 0:
+                    goal = remainingGoal
+                    rules = OrderedDict()
 
         if STATUSINFO:
             print("\n")
-
     # Convert the induced rules to a friendly format and output them
     printOutput(makeFriendlyRules(ruleSet))
 
@@ -668,8 +682,8 @@ def printOutput(ruleSet):
         print("{} rules have been induced:".format(ruleStr))
         if not ruleSet:
             print("  **No rules were produced of this type.\n")
-        else:
-            listPrint(ruleSet)
+        # else:
+        #     listPrint(ruleSet)
 
     outputFile = open(__outputFileName__, "w")
 
