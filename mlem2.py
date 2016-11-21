@@ -37,10 +37,11 @@ def listPrint(lst):
     print()
 
 # Prompts the user for valid input until the input filename can be opened.
-def checkFile(fileName):
+def checkFile(fileInput, permissions):
+    fileName = fileInput
     while True:
         try:
-            file = open(fileName)
+            file = open(fileName, permissions)
             break
         except IOError:
             fileName = input("Error, the file could not be opened. Try again:\t\t")
@@ -54,13 +55,13 @@ def checkFile(fileName):
 # Prompts the user for the input/output filenames and checks if they're valid, also gets rule type
 def userInput():
     global __inputFileName__
-    __inputFileName__ = checkFile(input("\nWhat is the name of the input dataset file?\t"))
+    __inputFileName__ = checkFile(input("\nWhat is the name of the input dataset file?\t"), "r")
 
     # Ask the user what type of rules (certain or possible) they want to generate.
     getRuleType()
 
     global __outputFileName__
-    __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"))
+    __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"), "w")
 
 # Parses the input file and stores all relevant information for parsing.
 # Modifies the array of cases to include the universe of cases
@@ -157,7 +158,7 @@ def calculateOtherSet():
     # If yes, back out and calculate
     if calculateOtherSet == 'y' or calculateOtherSet == 'Y':
         global __outputFileName__
-        __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"))
+        __outputFileName__ = checkFile(input("What is the name of the output file?\t\t"), "w")
         return True
     return False
 
