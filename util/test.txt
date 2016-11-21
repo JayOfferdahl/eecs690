@@ -1,4 +1,4 @@
-testfiles/image-35.txt
+testfiles/flu.txt
 1
 certain.txt
 y

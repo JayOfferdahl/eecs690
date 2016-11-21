@@ -25,7 +25,6 @@ __calcCertain__ = False
 __incompleteDataset__ = False
 
 # Output flags --> set to 1 if output is desired
-DEBUG = 0
 FASTRULES = 0
 STATUSINFO = 1
 
@@ -472,7 +471,7 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
         if goal and STATUSINFO:
             print("Calculating rules for [{}]".format(decision))
             print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
-            for i in range(59):
+            for i in range(51):
                 print(" ", end = "", flush = True)
             print("]", end = "", flush = True)
 
@@ -534,14 +533,8 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
             else:
                 rules[selectionAttr] = [selectionVal]
 
-            if DEBUG:
-                print("Selecting ({}, {}) : {}".format(selectionAttr, selectionVal, selectionBlock))
-                print("Selecting ({}, {})".format(selectionAttr, selectionVal))
-
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
             if len(runningBlock) and runningBlock.issubset(originalGoal):
-                if DEBUG:
-                    print("Attempting rule simplification for {}".format(rules))
                 # Combine numerical intervals to form the smallest interval (and save the
                 # calculated interval sets for condition dropping below
                 for key, value in rules.items():
@@ -591,50 +584,28 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 # the remaining goal (a.k.a. hardest bug to find ever)
                 matchedSet = set()
                 for attribute, key in rules.items():
-                    if DEBUG:
-                        print("{}:{}".format(attribute, key))
                     block = attrValueDict[attribute][key[0]]
-                    if DEBUG:
-                        print(block)
                     if len(matchedSet):
                         matchedSet = matchedSet.intersection(block)
                     else:
                         matchedSet = block
-                    if DEBUG:
-                        print(matchedSet)
-                        print()
 
                 if STATUSINFO:
                     newMatches = remainingGoal.intersection(matchedSet)
                     goalCompleted += len(newMatches)
                     print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
-                    calc = int(goalCompleted / goalSize * 59)
+                    calc = int(goalCompleted / goalSize * 51)
                     for i in range(calc):
                         print("=", end = "", flush = True)
-                    for i in range(59 - calc):
+                    for i in range(51 - calc):
                         print(" ", end = "", flush = True)
                     print("]", end = "", flush = True)
 
                 remainingGoal = remainingGoal - matchedSet
                 goal = goal - matchedSet
 
-                if DEBUG:
-                    print("We actually matched {}".format(matchedSet))
-                    print(rules)
-
-                if DEBUG:
-                    print("Matched {}, remaining: {}".format(runningBlock, remainingGoal))
-                    print("New values matched here:,",matchedGoal)
                 if not len(goal):
                     goal = remainingGoal
-                    if DEBUG:
-                        if not len(remainingGoal):
-                            print("***Original goal covered!***:")
-                        else:
-                            print("***Partially covered original goal, continuing***")
-                        print()
-                elif DEBUG:
-                    print("Current goal update:",goal)
 
                 # Add the new rule (with dropped values) to the ruleset
                 if FASTRULES:
