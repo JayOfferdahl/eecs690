@@ -525,7 +525,7 @@ def calculateCoverage(rules, attrValueDict):
 
     return matchedSet
 
-def calcLargestAVIntersection(attrValueDict, rules, goal):
+def calcLargestAVIntersection(attrValueDict, attrTypes, rules, goal):
     match = OrderedDict()
     match["intersection"] = set()
     match["value"] = None
@@ -534,15 +534,17 @@ def calcLargestAVIntersection(attrValueDict, rules, goal):
 
     for index, (attribute, attrValSet) in enumerate(attrValueDict.items()):
         for value, t in attrValSet.items():
-            if attribute not in rules or value not in rules[attribute]:
+            if (attrTypes[index] == 2 and (attribute not in rules or value not in rules[attribute]) or
+                attrTypes[index] == 1 and attribute not in rules):
                 temp = t.intersection(goal)
-                if ((len(temp) > len(match["intersection"])) or
-                    (len(temp) == len(match["intersection"]) and len(t) < len(match["matchBlock"]))):
+                if (len(temp) > len(match["intersection"]) or
+                    len(temp) == len(match["intersection"]) and len(t) < len(match["matchBlock"])):
                     match["intersection"] = temp
                     match["value"] = value
                     match["attribute"] = attribute
                     match["matchBlock"] = t
-    match["intersection"] = set(sorted(match["intersection"], key = int))
+    print("\n{} : {}".format(len(match["intersection"]), len(match["matchBlock"])))
+    # print(match["intersection"]) 
     return match
 
 def goalStatus(goalCompleted, goalSize):
@@ -552,7 +554,7 @@ def goalStatus(goalCompleted, goalSize):
         print("=", end = "", flush = True)
     for i in range(51 - calc):
         print(" ", end = "", flush = True)
-    print("]", end = "", flush = True)
+    print("] {} / {}".format(goalCompleted, goalSize), end = "", flush = True)
 
 # The function is responsible for taking input attribute value pairs/block and a set of goals in
 # order to determine a set of rules for this dataset. No matter the specification of possible or
@@ -580,12 +582,13 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
         # While we haven't found a covering
         while len(remainingGoal):
+            print("{} : {}**************************************".format(decision, goal))
             # m has four values
             # "intersection" - the intersection of the best match with the current goal
             # "value"        - the value of the attribute
             # "attribute"    - the attribute of this condition
             # "matchBlock"   - the entire block of the AV pair
-            m = calcLargestAVIntersection(attrValueDict, rules, goal)
+            m = calcLargestAVIntersection(attrValueDict, attrTypes, rules, goal)
 
             # Update our running block
             if runningBlock:
@@ -598,6 +601,10 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 rules[m["attribute"]].append(m["value"])
             else:
                 rules[m["attribute"]] = [m["value"]]
+
+            print(originalGoal)
+            print(runningBlock)
+            print("({}, {}) : {}".format(m["attribute"], m["value"], m["matchBlock"]))
 
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
             if runningBlock.issubset(originalGoal):
@@ -613,11 +620,18 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
                 match = calculateCoverage(rules, attrValueDict)
 
                 if STATUSINFO:
-                    goalCompleted += len(remainingGoal.intersection(match))
+                    casesCovered = remainingGoal.intersection(match)
+                    goalCompleted += len(casesCovered)
+                    # print("Cases covered by this rule: {}, Cases covered so far: {}".format(len(casesCovered), goalCompleted))
+                    # print("Progress: {} / {}".format(goalCompleted, goalSize))
+                    print("\n", match)
                     goalStatus(goalCompleted, goalSize)
 
-                remainingGoal = remainingGoal - match
-                goal = remainingGoal
+                print() 
+                print(rules)    
+
+
+                goal = remainingGoal = remainingGoal - match
 
                 # Add the new rule (with dropped values) to the ruleset
                 if FASTRULES:
