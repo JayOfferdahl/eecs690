@@ -2,6 +2,7 @@
 #
 #   Program: Rule Induction with MLEM2
 #   Author: Jay Offerdahl
+#   KUID: 2760730
 #   Class: EECS690 (Dr. Grzymala-Busse), Fall 2016
 #
 #   Description: Prompts the user for input/output files as well as a choice between calculating
@@ -26,7 +27,7 @@ __incompleteDataset__ = False
 
 # Output flags --> set to 1 if output is desired
 FASTRULES = 0
-STATUSINFO = 1
+STATUSINFO = 0
 
 # Prints out an enumerable object token by token, separating tokens with a newline.
 # Will print lines with link numbers starting at 0 if PRINT_LINE_NUMBERS is True
@@ -261,16 +262,7 @@ def calculateCutpointAttrValuePairs(universe, attrIndex):
 
     return numericAttrValuePairs
 
-def pairBlockSeparated(attrValueDict, attribute):
-    attrValuePairs = []
-    attrValueBlocks = []
-
-    for key, value in attrValueDict.items():
-        attrValuePairs.append("({}, {})".format(attribute, key))
-        attrValueBlocks.append(value)
-
-    return [attrValuePairs, attrValueBlocks]
-
+# Generates attribute value blocks given a universe and input attributes/concepts
 def generateAVBlocks(universe, attrIndex, attrType, attribute, concepts):
     attrValueDict = OrderedDict()
 
@@ -360,10 +352,12 @@ def calculateApprox(sets, concepts, approxType):
                 approximations[decision].update(block)
     return approximations
 
+# Splits up an input interval by the deliminator ".." and returns a list of the two intervals
 def generateFloatInterval(interval):
     edges = interval.split("..")
     return [float(i) for i in edges]
 
+# Calculates the characteristic sets for the input universe
 def calculateCSets(universe, attrValueDict, attributes, attrTypes, concepts):
     characteristicSets = []
 
@@ -449,6 +443,8 @@ def calculateAStar(universe):
 
     return aStar
 
+# Calculates the tightest interval within the input intervals
+# Assumes the input intervals have a valid common area
 def calculateInterval(intervals):
     low = "unset"
     high = "unset"
@@ -525,6 +521,7 @@ def calculateCoverage(rules, attrValueDict):
 
     return matchedSet
 
+# Calculates the largest intersection given all attribute value blocks and a current goal
 def calcLargestAVIntersection(attrValueDict, attrTypes, rules, goal):
     match = OrderedDict()
     match["intersection"] = set()
@@ -545,6 +542,7 @@ def calcLargestAVIntersection(attrValueDict, attrTypes, rules, goal):
                     match["matchBlock"] = t
     return match
 
+# Uses input numerator and denominator to print useful information while calculating rules
 def goalStatus(goalCompleted, goalSize):
     print("\r{}%\t[".format(round(goalCompleted / goalSize * 100), 1), end = "", flush = True)
     calc = int(goalCompleted / goalSize * 51)
