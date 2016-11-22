@@ -543,8 +543,6 @@ def calcLargestAVIntersection(attrValueDict, attrTypes, rules, goal):
                     match["value"] = value
                     match["attribute"] = attribute
                     match["matchBlock"] = t
-    print("\n{} : {}".format(len(match["intersection"]), len(match["matchBlock"])))
-    # print(match["intersection"]) 
     return match
 
 def goalStatus(goalCompleted, goalSize):
@@ -582,7 +580,6 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
 
         # While we haven't found a covering
         while len(remainingGoal):
-            print("{} : {}**************************************".format(decision, goal))
             # m has four values
             # "intersection" - the intersection of the best match with the current goal
             # "value"        - the value of the attribute
@@ -602,42 +599,29 @@ def mlem2(attrValueDict, attrTypes, goals, attrDecision):
             else:
                 rules[m["attribute"]] = [m["value"]]
 
-            print(originalGoal)
-            print(runningBlock)
-            print("({}, {}) : {}".format(m["attribute"], m["value"], m["matchBlock"]))
-
             # If we can make a rule, add it to the ruleset and update the goal to be what's missing
             if runningBlock.issubset(originalGoal):
                 if len(runningBlock) == 0:
-                    print("Empty running block, exiting")
-                    sys.exit()
-                # Reduce intervals down to one instead of many
-                compressIntervals(rules, attrValueDict)
-                # Drop any conditions that are unnecessary
-                dropConditions(rules, attrValueDict, originalGoal)
+                    # print("Empty running block, exiting")
+                    remainingGoal = remainingGoal - goal
+                    goal = remainingGoal
+                else:
+                    # Reduce intervals down to one instead of many
+                    compressIntervals(rules, attrValueDict)
+                    # Drop any conditions that are unnecessary
+                    dropConditions(rules, attrValueDict, originalGoal)
 
-                # Calculate what our final rule covers
-                match = calculateCoverage(rules, attrValueDict)
+                    # Calculate what our final rule covers
+                    match = calculateCoverage(rules, attrValueDict)
 
-                if STATUSINFO:
-                    casesCovered = remainingGoal.intersection(match)
-                    goalCompleted += len(casesCovered)
-                    # print("Cases covered by this rule: {}, Cases covered so far: {}".format(len(casesCovered), goalCompleted))
-                    # print("Progress: {} / {}".format(goalCompleted, goalSize))
-                    print("\n", match)
-                    goalStatus(goalCompleted, goalSize)
+                    if STATUSINFO:
+                        casesCovered = remainingGoal.intersection(match)
+                        goalCompleted += len(casesCovered)
+                        goalStatus(goalCompleted, goalSize)
 
-                print() 
-                print(rules)    
+                    goal = remainingGoal = remainingGoal - match
 
-
-                goal = remainingGoal = remainingGoal - match
-
-                # Add the new rule (with dropped values) to the ruleset
-                if FASTRULES:
-                    print(makeFriendlyRules([[rules, [attrDecision, decision]]]))
-
-                ruleSet.append([rules, [attrDecision,  decision]])
+                    ruleSet.append([rules, [attrDecision,  decision]])
                 rules = OrderedDict()
                 runningBlock = set()
             else:
